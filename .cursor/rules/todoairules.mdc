@@ -1,0 +1,49 @@
+---
+
+alwaysApply: true
+
+rules:
+
+- description: Never commit, push, or make git changes unless user explicitly says so
+  match: "\*"
+  actions:
+
+  - block_git_commit
+  - block_git_push
+  - block_git_add
+
+- description: Never build, run simulator, or start the project unless explicitly asked
+  match: "\*"
+  actions:
+  - block_xcode_build
+  - block_xcode_run
+  - block_simulator_launch
+
+coding_guidelines:
+
+- Write clean, professional Swift/SwiftUI code
+- Code should be scalable and easy to extend
+- Favor MVVM architecture with clear separation of concerns
+- Use best practices for SwiftUI state management
+- Avoid magic numbers and duplicated logic
+- Prioritize user experience with smooth, modern UI
+- Always explain complex logic with inline comments
+- Use descriptive, intention-revealing variable and method names
+- Ensure all features are iCloud-compatible where needed
+- Include unit test placeholders where applicable
+- Minimize side effects and prefer functional patterns where appropriate
+
+code_review_rules:
+
+- Think like a senior iOS/macOS engineer
+- Refactor poor logic before suggesting implementation
+- Suggest improvements if a design can be made cleaner or more efficient
+- Identify potential bugs or edge cases during review
+- Only write production-grade code, not MVP-quality hacks
+
+environment:
+
+- platform: iOS + macOS (SwiftUI)
+- backend: CloudKit (no Firebase)
+- language: Swift
+- project_goal: Cross-platform ToDo app with reminders, natural input, AI summaries, and Pomodoro
