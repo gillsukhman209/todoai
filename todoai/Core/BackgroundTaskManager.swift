@@ -197,7 +197,11 @@ class BackgroundTaskManager: ObservableObject {
         logger.info("Cleaning up expired notifications")
         
         // Get all pending notifications
-        let pendingRequests = await UNUserNotificationCenter.current().pendingNotificationRequests()
+        let pendingRequests = await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+                continuation.resume(returning: requests)
+            }
+        }
         
         let now = Date()
         var expiredIdentifiers: [String] = []

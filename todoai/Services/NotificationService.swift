@@ -254,6 +254,15 @@ class NotificationService: ObservableObject {
         // Schedule up to 64 notifications (iOS limit)
         let maxNotifications = 64
         var currentDate = Date()
+        var successfullyScheduled = 0
+        
+        // Check notifications before scheduling
+        let notificationsBefore = await withCheckedContinuation { continuation in
+            notificationCenter.getPendingNotificationRequests { requests in
+                continuation.resume(returning: requests)
+            }
+        }
+        print("🔔 Notifications before scheduling: \(notificationsBefore.count)")
         
         for i in 0..<maxNotifications {
             guard let nextOccurrence = schedule.calculateNextOccurrence(after: currentDate) else {
@@ -290,11 +299,30 @@ class NotificationService: ObservableObject {
                 trigger: trigger
             )
             
-            try await notificationCenter.add(request)
+            do {
+                print("🔔 Attempting to schedule notification \(i + 1) with ID: \(request.identifier)")
+                try await notificationCenter.add(request)
+                print("✅ Successfully scheduled notification \(i + 1) for \(nextOccurrence.formatted(date: .abbreviated, time: .shortened))")
+                logger.info("✅ Successfully scheduled notification \(i + 1) for \(nextOccurrence.formatted(date: .abbreviated, time: .shortened))")
+                successfullyScheduled += 1
+            } catch {
+                print("❌ Failed to schedule notification \(i + 1): \(error.localizedDescription)")
+                logger.error("❌ Failed to schedule notification \(i + 1): \(error.localizedDescription)")
+            }
+            
             currentDate = nextOccurrence
         }
         
-        logger.info("Scheduled recurring notifications for task: \(task.title)")
+        // Verify notifications were actually scheduled
+        let notificationsAfter = await withCheckedContinuation { continuation in
+            notificationCenter.getPendingNotificationRequests { requests in
+                continuation.resume(returning: requests)
+            }
+        }
+        print("🔔 Notifications after scheduling: \(notificationsAfter.count)")
+        print("🔔 Successfully scheduled \(successfullyScheduled) out of \(maxNotifications) attempted notifications")
+        
+        logger.info("Scheduled recurring notifications for task: \(task.title) - \(successfullyScheduled) successful")
     }
     
     // MARK: - Notification Management
@@ -306,15 +334,18 @@ class NotificationService: ObservableObject {
     }
     
     /// Cancel all notifications for a task (including recurring)
-    func cancelAllNotifications(for taskId: UUID) {
-        notificationCenter.getPendingNotificationRequests { requests in
-            let identifiersToCancel = requests.compactMap { request in
-                request.identifier.starts(with: taskId.uuidString) ? request.identifier : nil
+    func cancelAllNotifications(for taskId: UUID) async {
+        let requests = await withCheckedContinuation { continuation in
+            notificationCenter.getPendingNotificationRequests { requests in
+                continuation.resume(returning: requests)
             }
-            
-            self.notificationCenter.removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
-            self.logger.info("Cancelled all notifications for task: \(taskId)")
         }
+        let identifiersToCancel = requests.compactMap { request in
+            request.identifier.starts(with: taskId.uuidString) ? request.identifier : nil
+        }
+        
+        notificationCenter.removePendingNotificationRequests(withIdentifiers: identifiersToCancel)
+        logger.info("Cancelled all notifications for task: \(taskId)")
     }
     
     /// Cancel all pending notifications
@@ -325,7 +356,11 @@ class NotificationService: ObservableObject {
     
     /// Clean up old and expired notifications to stay under iOS 64 notification limit
     func cleanupOldNotifications() async {
-        let requests = await notificationCenter.pendingNotificationRequests()
+        let requests = await withCheckedContinuation { continuation in
+            notificationCenter.getPendingNotificationRequests { requests in
+                continuation.resume(returning: requests)
+            }
+        }
         print("🧹 Found \(requests.count) pending notifications before cleanup")
         
         guard requests.count > 50 else { // Start cleanup when we have more than 50
@@ -372,14 +407,22 @@ class NotificationService: ObservableObject {
     
     /// Get pending notifications count
     func getPendingNotificationsCount() async -> Int {
-        let requests = await notificationCenter.pendingNotificationRequests()
+        let requests = await withCheckedContinuation { continuation in
+            notificationCenter.getPendingNotificationRequests { requests in
+                continuation.resume(returning: requests)
+            }
+        }
         return requests.count
     }
     
     /// Get all pending notifications with details (for debugging)
     func getAllPendingNotifications() async -> [(identifier: String, title: String, triggerDate: Date?)] {
         print("🔔 getAllPendingNotifications() called")
-        let requests = await notificationCenter.pendingNotificationRequests()
+        let requests = await withCheckedContinuation { continuation in
+            notificationCenter.getPendingNotificationRequests { requests in
+                continuation.resume(returning: requests)
+            }
+        }
         print("🔔 Found \(requests.count) pending notification requests")
         
         return requests.map { request in
@@ -400,7 +443,11 @@ class NotificationService: ObservableObject {
     
     /// Check if a task has scheduled notifications
     func hasScheduledNotifications(for taskId: UUID) async -> Bool {
-        let requests = await notificationCenter.pendingNotificationRequests()
+        let requests = await withCheckedContinuation { continuation in
+            notificationCenter.getPendingNotificationRequests { requests in
+                continuation.resume(returning: requests)
+            }
+        }
         return requests.contains { request in
             request.identifier.starts(with: taskId.uuidString)
         }

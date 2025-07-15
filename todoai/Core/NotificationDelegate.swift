@@ -116,7 +116,7 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         }
         
         // Cancel future notifications for this task
-        notificationService.cancelAllNotifications(for: taskId)
+        await notificationService.cancelAllNotifications(for: taskId)
     }
     
 

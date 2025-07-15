@@ -302,12 +302,38 @@ final class EnhancedSchedule {
     
     private func calculateSpecificWeekdaysOccurrence(after date: Date, calendar: Calendar, weekdays: [EnhancedWeekday]) -> Date? {
         let sortedWeekdays = weekdays.sorted { $0.rawValue < $1.rawValue }
-        var nextDate = calendar.date(byAdding: .day, value: 1, to: date) ?? date
         
         print("🔔 calculateSpecificWeekdaysOccurrence:")
         print("🔔   after: \(date.formatted(date: .abbreviated, time: .shortened))")
         print("🔔   weekdays: \(sortedWeekdays.map { $0.rawValue })")
         print("🔔   timeRange: \(timeRange?.startTime.formatted(date: .abbreviated, time: .shortened) ?? "nil")")
+        
+        // First check if today matches the weekday and the time hasn't passed yet
+        let todayWeekday = calendar.component(.weekday, from: date)
+        print("🔔   Today's weekday: \(todayWeekday)")
+        
+        if sortedWeekdays.contains(where: { $0.rawValue == todayWeekday }) {
+            print("🔔   Today matches target weekday!")
+            
+            // Check if we have a time range and if the time hasn't passed yet today
+            if let timeRange = timeRange {
+                let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+                let today = calendar.startOfDay(for: date)
+                if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: today) {
+                    print("🔔   Checking if \(scheduledTime.formatted(date: .abbreviated, time: .shortened)) is after \(date.formatted(date: .abbreviated, time: .shortened))")
+                    
+                    if scheduledTime > date {
+                        print("🔔   Time hasn't passed yet today! Returning: \(scheduledTime.formatted(date: .abbreviated, time: .shortened))")
+                        return scheduledTime
+                    } else {
+                        print("🔔   Time has already passed today, looking for next occurrence")
+                    }
+                }
+            }
+        }
+        
+        // If today doesn't work, start checking from tomorrow
+        var nextDate = calendar.date(byAdding: .day, value: 1, to: date) ?? date
         
         // Find the next occurrence that falls on one of the specified weekdays
         for i in 0..<14 { // Check up to 2 weeks ahead

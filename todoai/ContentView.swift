@@ -171,7 +171,9 @@ struct ContentView: View {
     private func deleteTodo(_ todo: Todo) {
         withAnimation(.easeInOut(duration: 0.25)) {
             // Cancel any pending notifications for this task before deleting
-            NotificationService.shared.cancelAllNotifications(for: todo.id)
+            Task {
+                await NotificationService.shared.cancelAllNotifications(for: todo.id)
+            }
             
             // Delete the task from the database
             modelContext.delete(todo)
