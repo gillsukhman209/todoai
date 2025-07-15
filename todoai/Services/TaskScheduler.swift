@@ -203,7 +203,7 @@ class TaskScheduler: ObservableObject {
     /// Reschedule a task to a new date/time
     func rescheduleTask(_ task: EnhancedTask, to newDate: Date) async -> SchedulingResult {
         // Cancel existing notifications
-        notificationService.cancelAllNotifications(for: task.id)
+        await notificationService.cancelAllNotifications(for: task.id)
         
         // Update schedule
         task.schedule?.startDate = newDate
@@ -214,21 +214,19 @@ class TaskScheduler: ObservableObject {
     }
     
     /// Cancel scheduling for a task
-    func cancelTaskScheduling(_ task: EnhancedTask) {
-        notificationService.cancelAllNotifications(for: task.id)
+    func cancelTaskScheduling(_ task: EnhancedTask) async {
+        await notificationService.cancelAllNotifications(for: task.id)
         task.notificationState = .none
         
-        Task {
-            await updateScheduledTasksCount()
-        }
+        await updateScheduledTasksCount()
         
         logger.info("Cancelled scheduling for task: \(task.title)")
     }
     
     /// Handle task completion
-    func markTaskCompleted(_ task: EnhancedTask) {
+    func markTaskCompleted(_ task: EnhancedTask) async {
         // Cancel future notifications
-        notificationService.cancelAllNotifications(for: task.id)
+        await notificationService.cancelAllNotifications(for: task.id)
         
         // Update task state
         task.status = .completed
@@ -237,14 +235,10 @@ class TaskScheduler: ObservableObject {
         
         // If it's a recurring task, schedule the next occurrence
         if task.schedule?.type != .once {
-            Task {
-                _ = await scheduleTask(task)
-            }
+            _ = await scheduleTask(task)
         }
         
-        Task {
-            await updateScheduledTasksCount()
-        }
+        await updateScheduledTasksCount()
         
         logger.info("Marked task completed: \(task.title)")
     }
