@@ -98,7 +98,13 @@ final class Todo: Identifiable {
         
         // Set due date/time for one-time tasks
         if let dueDateString = parsedData.dueDate {
-            todo.dueDate = ISO8601DateFormatter().date(from: dueDateString)
+            // Try enhanced date parsing first
+            if let date = Date.from(dateString: dueDateString) {
+                todo.dueDate = date
+            } else {
+                // Fallback to ISO8601 format
+                todo.dueDate = ISO8601DateFormatter().date(from: dueDateString)
+            }
         }
         
         if let dueTimeString = parsedData.dueTime {
