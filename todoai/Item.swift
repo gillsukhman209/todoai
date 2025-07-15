@@ -7,9 +7,10 @@
 
 import Foundation
 import SwiftData
+import CoreTransferable
 
 @Model
-final class Todo: Identifiable {
+final class Todo: Identifiable, Transferable {
     @Attribute(.unique) var id: UUID
     var title: String
     var isCompleted: Bool
@@ -180,7 +181,29 @@ final class Todo: Identifiable {
         
         return todo
     }
+    
+    // MARK: - Transferable Conformance
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(contentType: .data) { todo in
+            try JSONEncoder().encode(TodoReference(id: todo.id))
+        } importing: { data in
+            let reference = try JSONDecoder().decode(TodoReference.self, from: data)
+            // This is a placeholder - the actual todo will be found by ID in the drop handler
+            return Todo(title: "placeholder")
+        }
+    }
 }
+
+// MARK: - Transfer Reference
+struct TodoReference: Codable, Transferable {
+    let id: UUID
+    
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .data)
+    }
+}
+
+
 
 // MARK: - Helper Extensions
 extension Int {
