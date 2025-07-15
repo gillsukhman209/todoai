@@ -8,6 +8,21 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - View Types
+enum TodoViewType: String, CaseIterable {
+    case inbox = "Inbox"
+    case today = "Today"
+    case upcoming = "Upcoming"
+    
+    var icon: String {
+        switch self {
+        case .inbox: return "tray.fill"
+        case .today: return "calendar"
+        case .upcoming: return "calendar.badge.clock"
+        }
+    }
+}
+
 // MARK: - Professional Design System
 extension Color {
     // Beautiful purple/teal professional color palette
@@ -36,17 +51,98 @@ struct ContentView: View {
     @State private var showingSchedulingView = false
     @State private var selectedTodoForScheduling: Todo?
     @State private var taskCreationViewModel: TaskCreationViewModel?
+    @State private var selectedView: TodoViewType = .inbox
     
     init() {
         // Initialize the state as nil - will be properly set up in onAppear
         _taskCreationViewModel = State(initialValue: nil)
     }
     
+    // MARK: - Computed Properties
+    
+    private var filteredTodos: [Todo] {
+        switch selectedView {
+        case .inbox:
+            return todos
+        case .today:
+            return todayTodos
+        case .upcoming:
+            return upcomingTodos
+        }
+    }
+    
+    private var todayTodos: [Todo] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        
+        return todos.filter { todo in
+            // Include if due today
+            if let dueDate = todo.dueDate {
+                return calendar.isDate(dueDate, inSameDayAs: today)
+            }
+            
+            // Include if created today (even without due date)
+            return calendar.isDate(todo.createdAt, inSameDayAs: today)
+        }
+    }
+    
+    private var upcomingTodos: [Todo] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let nextWeek = calendar.date(byAdding: .day, value: 7, to: today)!
+        
+        return todos.filter { todo in
+            // Include if has due date in the next 7 days
+            if let dueDate = todo.dueDate {
+                return dueDate >= today && dueDate < nextWeek
+            }
+            
+            // Include if created in the next 7 days (for recurring tasks)
+            return todo.createdAt >= today && todo.createdAt < nextWeek
+        }
+    }
+    
+    private var groupedUpcomingTodos: [(String, [Todo])] {
+        let calendar = Calendar.current
+        let today = Date()
+        var groups: [String: [Todo]] = [:]
+        
+        // Create groups for each day of the week
+        for i in 0..<7 {
+            let date = calendar.date(byAdding: .day, value: i, to: calendar.startOfDay(for: today))!
+            let dayName = calendar.weekdaySymbols[calendar.component(.weekday, from: date) - 1]
+            let dateString = i == 0 ? "Today" : (i == 1 ? "Tomorrow" : dayName)
+            groups[dateString] = []
+        }
+        
+        // Group todos by their due date or creation date
+        for todo in upcomingTodos {
+            let targetDate = todo.dueDate ?? todo.createdAt
+            let daysDiff = calendar.dateComponents([.day], from: calendar.startOfDay(for: today), to: calendar.startOfDay(for: targetDate)).day ?? 0
+            
+            if daysDiff >= 0 && daysDiff < 7 {
+                let date = calendar.date(byAdding: .day, value: daysDiff, to: calendar.startOfDay(for: today))!
+                let dayName = calendar.weekdaySymbols[calendar.component(.weekday, from: date) - 1]
+                let dateString = daysDiff == 0 ? "Today" : (daysDiff == 1 ? "Tomorrow" : dayName)
+                groups[dateString, default: []].append(todo)
+            }
+        }
+        
+        // Return in order: Today, Tomorrow, then days of the week
+        let orderedKeys = ["Today", "Tomorrow"] + calendar.weekdaySymbols.filter { !["Today", "Tomorrow"].contains($0) }
+        return orderedKeys.compactMap { key in
+            guard let todos = groups[key], !todos.isEmpty else { return nil }
+            return (key, todos.sorted { $0.createdAt > $1.createdAt })
+        }
+    }
+    
     var body: some View {
         ZStack(alignment: .leading) {
             // Main content area
             TodoListView(
-                todos: todos, 
+                todos: filteredTodos,
+                selectedView: selectedView,
+                groupedUpcomingTodos: groupedUpcomingTodos,
                 onDeleteTodo: deleteTodo,
                 onToggleComplete: toggleTodoComplete,
                 onScheduleTodo: showSchedulingView,
@@ -60,7 +156,13 @@ struct ContentView: View {
             // Custom floating sidebar
             if showSidebar {
                 FloatingSidebarView(
-                    activeTodoCount: todos.filter { !$0.isCompleted }.count,
+                    activeTodoCount: filteredTodos.filter { !$0.isCompleted }.count,
+                    selectedView: selectedView,
+                    onViewChange: { newView in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedView = newView
+                        }
+                    },
                     onDismiss: { 
                         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                             showSidebar = false
@@ -224,6 +326,8 @@ struct ContentView: View {
 
 struct FloatingSidebarView: View {
     let activeTodoCount: Int
+    let selectedView: TodoViewType
+    let onViewChange: (TodoViewType) -> Void
     let onDismiss: () -> Void
     let onSettings: () -> Void
     @State private var isHovered = false
@@ -266,26 +370,17 @@ struct FloatingSidebarView: View {
             
             // Navigation items
             VStack(spacing: 8) {
-                SidebarItemView(
-                    icon: "tray.fill",
-                    title: "Inbox",
-                    count: activeTodoCount,
-                    isSelected: true
-                )
-                
-                SidebarItemView(
-                    icon: "calendar",
-                    title: "Today",
-                    count: nil,
-                    isSelected: false
-                )
-                
-                SidebarItemView(
-                    icon: "calendar.badge.clock",
-                    title: "Upcoming",
-                    count: nil,
-                    isSelected: false
-                )
+                ForEach(TodoViewType.allCases, id: \.self) { viewType in
+                    SidebarItemView(
+                        icon: viewType.icon,
+                        title: viewType.rawValue,
+                        count: viewType == .inbox ? activeTodoCount : nil,
+                        isSelected: selectedView == viewType,
+                        onTap: {
+                            onViewChange(viewType)
+                        }
+                    )
+                }
             }
             .padding(.horizontal, 16)
             
@@ -375,6 +470,7 @@ struct SidebarItemView: View {
     let title: String
     let count: Int?
     let isSelected: Bool
+    let onTap: () -> Void
     @State private var isHovered = false
     
     var body: some View {
@@ -413,11 +509,16 @@ struct SidebarItemView: View {
                 isHovered = hovering
             }
         }
+        .onTapGesture {
+            onTap()
+        }
     }
 }
 
 struct TodoListView: View {
     let todos: [Todo]
+    let selectedView: TodoViewType
+    let groupedUpcomingTodos: [(String, [Todo])]
     let onDeleteTodo: (Todo) -> Void
     let onToggleComplete: (Todo) -> Void
     let onScheduleTodo: (Todo) -> Void
@@ -459,7 +560,7 @@ struct TodoListView: View {
                     }
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Inbox")
+                        Text(selectedView.rawValue)
                             .font(.system(size: 28, weight: .bold, design: .default))
                             .foregroundColor(Color.primaryText)
                         
@@ -468,7 +569,7 @@ struct TodoListView: View {
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(Color.secondaryText)
                         } else {
-                            Text("All caught up")
+                            Text(selectedView == .today ? "No tasks for today" : "All caught up")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(Color.secondaryText)
                         }
@@ -516,65 +617,109 @@ struct TodoListView: View {
                 
                 // Clean task list
                 LazyVStack(spacing: 8) {
-                    
-                    // Active todos
-                    ForEach(activeTodos) { todo in
-                        TodoRowView(
-                            todo: todo,
-                            onToggleComplete: { onToggleComplete(todo) },
-                            onDelete: { onDeleteTodo(todo) },
-                            onSchedule: { onScheduleTodo(todo) },
-                            isFocused: focusedTodoID == todo.id,
-                            onFocus: { focusedTodoID = todo.id },
-                            isEditingTriggered: editingTodoID == todo.id,
-                            onEditingChange: { isEditing in
-                                if !isEditing {
-                                    editingTodoID = nil
+                    if selectedView == .upcoming {
+                        // Upcoming view - grouped by day
+                        ForEach(groupedUpcomingTodos, id: \.0) { dayName, dayTodos in
+                            VStack(spacing: 12) {
+                                HStack {
+                                    Text(dayName)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(Color.secondaryText)
+                                    
+                                    Spacer()
+                                    
+                                    Text("\(dayTodos.count)")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(Color.tertiaryText)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.tertiaryText.opacity(0.1))
+                                        .clipShape(Capsule())
+                                }
+                                .padding(.horizontal, 32)
+                                .padding(.top, dayName == groupedUpcomingTodos.first?.0 ? 0 : 24)
+                                
+                                ForEach(dayTodos) { todo in
+                                    TodoRowView(
+                                        todo: todo,
+                                        onToggleComplete: { onToggleComplete(todo) },
+                                        onDelete: { onDeleteTodo(todo) },
+                                        onSchedule: { onScheduleTodo(todo) },
+                                        isFocused: focusedTodoID == todo.id,
+                                        onFocus: { focusedTodoID = todo.id },
+                                        isEditingTriggered: editingTodoID == todo.id,
+                                        onEditingChange: { isEditing in
+                                            if !isEditing {
+                                                editingTodoID = nil
+                                            }
+                                        }
+                                    )
+                                    .padding(.horizontal, 32)
+                                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
                                 }
                             }
-                        )
-                        .padding(.horizontal, 32)
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    }
-                    
-                    // Completed section
-                    if !completedTodos.isEmpty {
-                        VStack(spacing: 12) {
-                            HStack {
-                                Text("Completed")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(Color.secondaryText)
-                                
-                                Spacer()
-                                
-                                Text("\(completedTodos.count)")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(Color.tertiaryText)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.tertiaryText.opacity(0.1))
-                                    .clipShape(Capsule())
-                            }
-                            .padding(.horizontal, 32)
-                            .padding(.top, 24)
-                            
-                            ForEach(completedTodos) { todo in
-                                TodoRowView(
-                                    todo: todo,
-                                    onToggleComplete: { onToggleComplete(todo) },
-                                    onDelete: { onDeleteTodo(todo) },
-                                    onSchedule: { onScheduleTodo(todo) },
-                                    isFocused: focusedTodoID == todo.id,
-                                    onFocus: { focusedTodoID = todo.id },
-                                    isEditingTriggered: editingTodoID == todo.id,
-                                    onEditingChange: { isEditing in
-                                        if !isEditing {
-                                            editingTodoID = nil
-                                        }
+                        }
+                    } else {
+                        // Regular view (Inbox or Today)
+                        // Active todos
+                        ForEach(activeTodos) { todo in
+                            TodoRowView(
+                                todo: todo,
+                                onToggleComplete: { onToggleComplete(todo) },
+                                onDelete: { onDeleteTodo(todo) },
+                                onSchedule: { onScheduleTodo(todo) },
+                                isFocused: focusedTodoID == todo.id,
+                                onFocus: { focusedTodoID = todo.id },
+                                isEditingTriggered: editingTodoID == todo.id,
+                                onEditingChange: { isEditing in
+                                    if !isEditing {
+                                        editingTodoID = nil
                                     }
-                                )
+                                }
+                            )
+                            .padding(.horizontal, 32)
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        }
+                        
+                        // Completed section
+                        if !completedTodos.isEmpty {
+                            VStack(spacing: 12) {
+                                HStack {
+                                    Text("Completed")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(Color.secondaryText)
+                                    
+                                    Spacer()
+                                    
+                                    Text("\(completedTodos.count)")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(Color.tertiaryText)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.tertiaryText.opacity(0.1))
+                                        .clipShape(Capsule())
+                                }
                                 .padding(.horizontal, 32)
-                                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                                .padding(.top, 24)
+                                
+                                ForEach(completedTodos) { todo in
+                                    TodoRowView(
+                                        todo: todo,
+                                        onToggleComplete: { onToggleComplete(todo) },
+                                        onDelete: { onDeleteTodo(todo) },
+                                        onSchedule: { onScheduleTodo(todo) },
+                                        isFocused: focusedTodoID == todo.id,
+                                        onFocus: { focusedTodoID = todo.id },
+                                        isEditingTriggered: editingTodoID == todo.id,
+                                        onEditingChange: { isEditing in
+                                            if !isEditing {
+                                                editingTodoID = nil
+                                            }
+                                        }
+                                    )
+                                    .padding(.horizontal, 32)
+                                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                                }
                             }
                         }
                     }
