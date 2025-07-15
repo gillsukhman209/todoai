@@ -11,24 +11,38 @@ import SwiftData
 @main
 struct todoaiApp: App {
     var sharedModelContainer: ModelContainer = {
+        let schema = Schema([Todo.self])
+        let modelConfiguration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false
+        )
+        
         do {
-            let schema = Schema([Todo.self])
-            let modelConfiguration = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: false,
-                allowsSave: true,
-                cloudKitDatabase: .none
-            )
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            // If there's a schema migration issue, try with in-memory storage as fallback
-            print("Failed to create persistent ModelContainer: \(error)")
+            print("Failed to create ModelContainer: \(error)")
+            // Create directory if it doesn't exist
+            let url = URL.applicationSupportDirectory.appendingPathComponent("todoai")
+            try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            
+            // Try again with explicit URL
+            let dbURL = url.appendingPathComponent("TodoDB.sqlite")
+            let config = ModelConfiguration(
+                schema: schema,
+                url: dbURL,
+                allowsSave: true
+            )
+            
             do {
-                let schema = Schema([Todo.self])
-                let memoryConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-                return try ModelContainer(for: schema, configurations: [memoryConfiguration])
+                return try ModelContainer(for: schema, configurations: [config])
             } catch {
-                fatalError("Could not create ModelContainer: \(error)")
+                print("Second attempt failed: \(error)")
+                // Last resort: create a basic persistent container
+                do {
+                    return try ModelContainer(for: Todo.self)
+                } catch {
+                    fatalError("Could not create ModelContainer: \(error)")
+                }
             }
         }
     }()
