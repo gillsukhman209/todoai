@@ -470,6 +470,11 @@ struct AddTodoRow: View {
                 .foregroundColor(Color.primaryText)
                 .focused($isNewTodoFocused)
                 .textFieldStyle(.plain)
+                .background(Color.clear)
+                .overlay(
+                    Rectangle()
+                        .stroke(Color.clear)
+                )
                 .onSubmit {
                     onAddTodo()
                 }
@@ -499,6 +504,7 @@ struct TodoRowView: View {
     @State private var editingTitle = ""
     @State private var isHovered = false
     @FocusState private var isEditingFocused: Bool
+    @FocusState private var isTodoFocused: Bool
     
     var body: some View {
         HStack(spacing: 12) {
@@ -546,6 +552,11 @@ struct TodoRowView: View {
                         saveEdit()
                     }
                     .textFieldStyle(.plain)
+                    .background(Color.clear)
+                    .overlay(
+                        Rectangle()
+                            .stroke(Color.clear)
+                    )
             } else {
                 Text(todo.title)
                     .font(.system(size: 15, weight: .medium))
@@ -567,21 +578,37 @@ struct TodoRowView: View {
             
             Spacer()
             
-            // Clean delete button
+            // Edit and delete buttons
             if isHovered && !isEditing {
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        onDelete()
+                HStack(spacing: 8) {
+                    // Edit button
+                    Button(action: {
+                        startEditing()
+                    }) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Color.accent)
+                            .frame(width: 24, height: 24)
+                            .background(Color.accent.opacity(0.1))
+                            .clipShape(Circle())
                     }
-                }) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.red)
-                        .frame(width: 24, height: 24)
-                        .background(Color.red.opacity(0.1))
-                        .clipShape(Circle())
+                    .buttonStyle(.plain)
+                    
+                    // Delete button
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            onDelete()
+                        }
+                    }) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.red)
+                            .frame(width: 24, height: 24)
+                            .background(Color.red.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
                 .transition(.opacity)
             }
         }
@@ -589,7 +616,7 @@ struct TodoRowView: View {
         .padding(.vertical, 12)
         .background(
             ZStack {
-                // Glass background with hover effect
+                // Glass background with hover effects only
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(isHovered ? Color.hoverBackground : Color.cardBackground)
                     .background(
@@ -597,12 +624,9 @@ struct TodoRowView: View {
                             .fill(.ultraThinMaterial)
                     )
                 
-                // Dynamic border for editing state
+                // Subtle border for all states
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(
-                        isEditing ? Color.accent.opacity(0.8) : Color.white.opacity(0.2), 
-                        lineWidth: isEditing ? 2 : 1
-                    )
+                    .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
             }
             .shadow(
                 color: Color.black.opacity(isHovered ? 0.4 : 0.2), 
@@ -616,6 +640,27 @@ struct TodoRowView: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .focusable()
+        .focused($isTodoFocused)
+        .onTapGesture {
+            isTodoFocused = true
+        }
+        .onKeyPress { keyPress in
+            if isTodoFocused && !isEditing {
+                if keyPress.characters == "e" || keyPress.characters == "E" {
+                    startEditing()
+                    return .handled
+                } else if keyPress.characters == "\u{8}" || keyPress.characters == "\u{7F}" {
+                    // \u{8} is backspace, \u{7F} is delete
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        onDelete()
+                    }
+                    return .handled
+                }
+            }
+            return .ignored
+        }
+        .focusEffectDisabled()
     }
     
     private func startEditing() {
