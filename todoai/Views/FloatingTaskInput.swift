@@ -324,8 +324,13 @@ struct ExampleCard: View {
         .background(
             LinearGradient(
                 colors: [
-                    Color(red: 0.25, green: 0.12, blue: 0.40),
-                    Color(red: 0.08, green: 0.55, blue: 0.70)
+                    Color(red: 0.05, green: 0.05, blue: 0.05),
+                    Color(red: 0.08, green: 0.08, blue: 0.08),
+                    Color(red: 0.12, green: 0.12, blue: 0.12),
+                    Color(red: 0.15, green: 0.15, blue: 0.15),
+                    Color(red: 0.10, green: 0.10, blue: 0.10),
+                    Color(red: 0.06, green: 0.06, blue: 0.06),
+                    Color(red: 0.02, green: 0.02, blue: 0.02)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
