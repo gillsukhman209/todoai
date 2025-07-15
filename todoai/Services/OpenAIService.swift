@@ -71,8 +71,18 @@ final class OpenAIService: ObservableObject {
         logger.info("✅ Extracted content from OpenAI response")
         logger.info("📄 Raw AI response: \(jsonString)")
         
+        // Strip markdown code blocks if present
+        let cleanedJsonString = jsonString
+            .replacingOccurrences(of: "```json\n", with: "")
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "\n```", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        logger.info("🧹 Cleaned JSON string: \(cleanedJsonString)")
+        
         // Parse the JSON response
-        guard let jsonData = jsonString.data(using: .utf8) else {
+        guard let jsonData = cleanedJsonString.data(using: .utf8) else {
             logger.error("❌ Failed to convert string to data")
             throw OpenAIError.invalidJSON
         }
@@ -85,7 +95,7 @@ final class OpenAIService: ObservableObject {
             return parsedData
         } catch {
             logger.error("❌ Failed to decode JSON: \(error.localizedDescription)")
-            logger.error("❌ Raw JSON: \(jsonString)")
+            logger.error("❌ Cleaned JSON: \(cleanedJsonString)")
             throw OpenAIError.invalidJSON
         }
     }
@@ -212,14 +222,61 @@ final class OpenAIService: ObservableObject {
     }
     
     private func createTaskParsingPrompt(for input: String) -> String {
+        let now = Date()
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
+        formatter.timeZone = TimeZone.current
+        let currentDateTime = formatter.string(from: now)
+        
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "h:mm a"
+        timeFormatter.timeZone = TimeZone.current
+        let currentTime = timeFormatter.string(from: now)
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "MMMM d, yyyy"
+        dateFormatter.timeZone = TimeZone.current
+        let currentDate = dateFormatter.string(from: now)
+        
         return """
         You are a task parsing assistant. Parse natural language task input into structured JSON data.
 
+        CURRENT DATE/TIME: \(currentDateTime)
+        CURRENT TIME: \(currentTime)
+        CURRENT DATE: \(currentDate)
+
         Your job is to extract:
         1. A clean task title (remove time/recurrence information)
-        2. Due date/time for one-time tasks
+        2. Due date/time for one-time tasks (including relative time calculations)
         3. Recurrence patterns for repeating tasks
         4. Time constraints and ranges
+
+        RELATIVE TIME HANDLING:
+        - "in 5 minutes" → calculate exact time 5 minutes from now
+        - "in 30 minutes" → calculate exact time 30 minutes from now
+        - "in an hour" → calculate exact time 1 hour from now
+        - "in 2 hours" → calculate exact time 2 hours from now
+        - "in 2mins" → calculate exact time 2 minutes from now
+        - "in 5mins" → calculate exact time 5 minutes from now
+        - "in 10mins" → calculate exact time 10 minutes from now
+        - "in 1min" → calculate exact time 1 minute from now
+        - "in 30sec" → calculate exact time 30 seconds from now
+        - "in 1hr" → calculate exact time 1 hour from now
+        - "in 2hrs" → calculate exact time 2 hours from now
+        - "in 3hrs" → calculate exact time 3 hours from now
+        - "tomorrow" → next day at reasonable time or specified time
+        - "next week" → 7 days from now
+        - "next Monday" → the upcoming Monday
+        - "next Tuesday" → the upcoming Tuesday
+        - "tonight" → today at evening time (7-9 PM)
+        - "this morning" → today at morning time (8-10 AM)
+        - "this afternoon" → today at afternoon time (1-3 PM)
+        - "this evening" → today at evening time (6-8 PM)
+        - "later today" → today at a reasonable future time
+        - "later" → in a few hours from now
+        - "soon" → in 30 minutes to 1 hour from now
+        - "Monday" (if today is Wednesday) → next Monday
+        - "Friday" (if today is Tuesday) → this Friday
 
         RECURRENCE TYPES:
         - "none": One-time task
@@ -233,6 +290,49 @@ final class OpenAIService: ObservableObject {
         - "multiple_daily_times": Multiple times per day
 
         EXAMPLES:
+
+        CRITICAL: For relative time expressions, you MUST calculate the actual time/date values. DO NOT return placeholders like "[CALCULATE: ...]". Calculate the actual time based on the current date/time provided above.
+
+        Example calculations:
+        - If current time is 2:30 PM and user says "in 30 minutes", return "3:00 PM"
+        - If current time is 10:15 AM and user says "in 2 hours", return "12:15 PM"
+        - If current time is 5:45 PM and user says "in 15 minutes", return "6:00 PM"
+
+        Input: "remind me in 30 minutes to take out the trash"
+        Output: {"cleanTitle": "take out the trash", "dueDate": null, "dueTime": "3:00 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to take out the trash in 30 minutes"}
+
+        Input: "remind me in an hour to check my email"
+        Output: {"cleanTitle": "check my email", "dueDate": null, "dueTime": "3:30 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to check email in 1 hour"}
+
+        Input: "remind me soon to call the dentist"
+        Output: {"cleanTitle": "call the dentist", "dueDate": null, "dueTime": "3:15 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to call the dentist soon"}
+
+        Input: "remind me later to review my presentation"
+        Output: {"cleanTitle": "review my presentation", "dueDate": null, "dueTime": "5:30 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to review presentation later today"}
+
+        Input: "remind me next Monday to submit my report"
+        Output: {"cleanTitle": "submit my report", "dueDate": "2025-07-21", "dueTime": "9:00 AM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to submit report next Monday"}
+
+        Input: "remind me in 5 minutes to go for a walk"
+        Output: {"cleanTitle": "go for a walk", "dueDate": null, "dueTime": "2:35 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to go for a walk in 5 minutes"}
+
+        Input: "remind me in 2mins to drink water"
+        Output: {"cleanTitle": "drink water", "dueDate": null, "dueTime": "2:32 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to drink water in 2 minutes"}
+
+        Input: "remind me in 1hr to check email"
+        Output: {"cleanTitle": "check email", "dueDate": null, "dueTime": "3:30 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to check email in 1 hour"}
+
+        Input: "remind me in 2 hours to check on the laundry"
+        Output: {"cleanTitle": "check on the laundry", "dueDate": null, "dueTime": "4:30 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to check on laundry in 2 hours"}
+
+        Input: "remind me tomorrow at 9am to call mom"
+        Output: {"cleanTitle": "call mom", "dueDate": "2025-07-16", "dueTime": "9:00 AM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to call mom tomorrow at 9 AM"}
+
+        Input: "remind me tonight to lock the door"
+        Output: {"cleanTitle": "lock the door", "dueDate": null, "dueTime": "8:00 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to lock the door tonight"}
+
+        Input: "remind me this afternoon to water the plants"
+        Output: {"cleanTitle": "water the plants", "dueDate": null, "dueTime": "2:00 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to water the plants this afternoon"}
 
         Input: "call dad at 6am"
         Output: {"cleanTitle": "call dad", "dueDate": null, "dueTime": "6:00 AM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time task to call dad at 6 AM"}
@@ -269,6 +369,12 @@ final class OpenAIService: ObservableObject {
         - For custom intervals with hours, use interval in hours
         - Clean titles should not contain time or recurrence information
         - Always include a helpful description
+        - For relative time expressions, calculate the exact time based on current time
+        - For relative dates, calculate the exact date based on current date
+        - When time is ambiguous, use reasonable defaults (morning: 9 AM, afternoon: 2 PM, evening: 7 PM, night: 8 PM)
+        - NEVER return placeholder text like "[CALCULATE: ...]" - always return actual calculated values
+        - For dates, use YYYY-MM-DD format (e.g., "2025-07-16")
+        - For times, use 12-hour format with AM/PM (e.g., "3:30 PM")
 
         Return ONLY the JSON object, no other text.
         """

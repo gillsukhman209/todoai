@@ -136,25 +136,33 @@ final class TaskCreationViewModel: ObservableObject {
         logger.info("Auto-scheduling notification for: '\(todo.title)'")
         
         do {
+            // Request notification permissions if needed
+            let taskScheduler = TaskScheduler.shared
+            let hasPermission = await taskScheduler.requestNotificationPermissionIfNeeded()
+            
+            if !hasPermission {
+                logger.warning("Notification permission denied, cannot schedule for: '\(todo.title)'")
+                return
+            }
+            
             // Create enhanced schedule from parsed data
             let schedule = createEnhancedSchedule(from: parsedData)
             
-            // Use TaskScheduler to schedule the notification
-            let taskScheduler = TaskScheduler.shared
+            // Schedule the notification
             let result = await taskScheduler.convertAndScheduleTask(todo, withSchedule: schedule)
             
             switch result {
             case .success:
-                logger.info("Successfully auto-scheduled notification for: '\(todo.title)'")
+                logger.info("✅ Successfully auto-scheduled notification for: '\(todo.title)'")
             case .permissionDenied:
-                logger.warning("Notification permission denied for: '\(todo.title)'")
+                logger.warning("⚠️ Notification permission denied for: '\(todo.title)'")
             case .invalidDate:
-                logger.error("Invalid date for auto-scheduling: '\(todo.title)'")
+                logger.error("❌ Invalid date for auto-scheduling: '\(todo.title)'")
             case .schedulingFailed(let reason):
-                logger.error("Auto-scheduling failed for '\(todo.title)': \(reason)")
+                logger.error("❌ Auto-scheduling failed for '\(todo.title)': \(reason)")
             }
         } catch {
-            logger.error("Error auto-scheduling notification for '\(todo.title)': \(error.localizedDescription)")
+            logger.error("❌ Error auto-scheduling notification for '\(todo.title)': \(error.localizedDescription)")
         }
     }
     
