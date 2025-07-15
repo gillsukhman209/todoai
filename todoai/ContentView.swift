@@ -23,23 +23,28 @@ enum TodoViewType: String, CaseIterable {
     }
 }
 
-// MARK: - Professional Design System
+// MARK: - Liquid Glass Design System
 extension Color {
-    // Beautiful purple/teal professional color palette
+    // Liquid glass color palette
     static let accent = Color(red: 0.4, green: 0.6, blue: 0.9) // Vibrant blue
     static let accentSecondary = Color(red: 0.3, green: 0.7, blue: 0.8) // Rich teal
     
-    // Professional backgrounds with glass effect
-    static let cardBackground = Color.white.opacity(0.1)
-    static let hoverBackground = Color.white.opacity(0.15)
+    // Advanced glass morphism backgrounds
+    static let cardBackground = Color.white.opacity(0.08)
+    static let hoverBackground = Color.white.opacity(0.12)
+    static let activeBackground = Color.white.opacity(0.16)
     
-    // Clean primary background for sidebars
-    static let primaryBackground = Color.black.opacity(0.2)
+    // Liquid glass primary background
+    static let primaryBackground = Color.white.opacity(0.05)
     
-    // Text colors optimized for dark gradient
+    // Glass-optimized text colors
     static let primaryText = Color.white
-    static let secondaryText = Color.white.opacity(0.8)
-    static let tertiaryText = Color.white.opacity(0.6)
+    static let secondaryText = Color.white.opacity(0.85)
+    static let tertiaryText = Color.white.opacity(0.65)
+    
+    // Glass border colors
+    static let glassBorder = Color.white.opacity(0.2)
+    static let glassActiveBorder = Color.white.opacity(0.3)
 }
 
 struct ContentView: View {
@@ -387,7 +392,7 @@ struct FloatingSidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .scaleEffect(isHovered ? 1.1 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovered)
+                .animation(.interactiveSpring(response: 0.25, dampingFraction: 0.7, blendDuration: 0.2), value: isHovered)
                 .onHover { hovering in
                     isHovered = hovering
                 }
@@ -451,9 +456,9 @@ struct FloatingSidebarView: View {
         }
         .frame(width: 260)
         .background(
-            // Dark black sidebar gradient - Sophisticated black theme
+            // Liquid glass sidebar - Advanced glass morphism
             ZStack {
-                // Main gradient
+                // Main gradient base
                 LinearGradient(
                     colors: [
                         Color(red: 0.08, green: 0.08, blue: 0.08).opacity(0.95),   // Dark gray
@@ -464,30 +469,62 @@ struct FloatingSidebarView: View {
                     endPoint: .bottomTrailing
                 )
                 
-                // Glass overlay
+                // Multi-layer glass effect
                 Rectangle()
                     .fill(.ultraThinMaterial)
-                    .opacity(0.3)
+                    .opacity(0.4)
                 
-                // Accent highlight
+                Rectangle()
+                    .fill(.thickMaterial)
+                    .opacity(0.2)
+                
+                // Liquid glass highlight
                 LinearGradient(
                     colors: [
-                        Color.accent.opacity(0.2),
+                        Color.white.opacity(0.1),
                         Color.clear,
-                        Color.accentSecondary.opacity(0.15)
+                        Color.white.opacity(0.05)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .blendMode(.overlay)
+                
+                // Accent liquid effect
+                LinearGradient(
+                    colors: [
+                        Color.accent.opacity(0.15),
+                        Color.clear,
+                        Color.accentSecondary.opacity(0.1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .blendMode(.overlay)
+                .blendMode(.softLight)
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.glassBorder, lineWidth: 1.5)
         )
-        .shadow(color: Color.black.opacity(0.4), radius: 25, x: 0, y: 10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.3),
+                            Color.clear,
+                            Color.white.opacity(0.1)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: Color.black.opacity(0.3), radius: 30, x: 0, y: 15)
+        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
         .padding(.leading, 20)
         .padding(.vertical, 20)
     }
@@ -527,11 +564,50 @@ struct SidebarItemView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isSelected ? Color.accent.opacity(0.2) : (isHovered ? Color.white.opacity(0.1) : Color.clear))
+            ZStack {
+                // Liquid glass base
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        isSelected ? Color.activeBackground : 
+                        (isHovered ? Color.hoverBackground : Color.clear)
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .opacity(isSelected ? 0.6 : (isHovered ? 0.4 : 0))
+                    )
+                
+                // Liquid glass border
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Color.glassActiveBorder : 
+                        (isHovered ? Color.glassBorder : Color.clear),
+                        lineWidth: 1
+                    )
+                    .opacity(isSelected ? 1.0 : (isHovered ? 0.8 : 0))
+                
+                // Liquid highlight for selected state
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.accent.opacity(0.3),
+                                    Color.accent.opacity(0.1),
+                                    Color.accentSecondary.opacity(0.1)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .blendMode(.overlay)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+            }
         )
         .scaleEffect(isHovered ? 1.02 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
+        .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2), value: isHovered)
+        .animation(.interactiveSpring(response: 0.25, dampingFraction: 0.9, blendDuration: 0.15), value: isSelected)
         .onHover { hovering in
             if !isSelected {
                 isHovered = hovering
@@ -1200,30 +1276,81 @@ struct TodoRowView: View {
         .padding(.vertical, 12)
         .background(
             ZStack {
-                // Glass background with hover and focus effects
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                // Advanced liquid glass background
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(
-                        isFocused ? Color.accent.opacity(0.05) :
+                        isFocused ? Color.activeBackground :
                         (isHovered ? Color.hoverBackground : Color.cardBackground)
                     )
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .fill(.ultraThinMaterial)
+                            .opacity(0.8)
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.thickMaterial)
+                            .opacity(0.3)
                     )
                 
-                // Subtle border for all states
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                // Liquid glass border with animated glow
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(
+                        isFocused ? Color.glassActiveBorder : Color.glassBorder,
+                        lineWidth: isFocused ? 2 : 1
+                    )
+                    .opacity(isHovered ? 1.0 : 0.8)
+                
+                // Subtle inner glow for glass effect
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.3),
+                                Color.clear,
+                                Color.white.opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+                    .opacity(isHovered ? 0.8 : 0.5)
+                
+                // Liquid highlight effect
+                if isHovered {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.accent.opacity(0.1),
+                                    Color.clear,
+                                    Color.accentSecondary.opacity(0.05)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .blendMode(.overlay)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
             }
             .shadow(
-                color: Color.black.opacity(isHovered ? 0.4 : 0.2), 
-                radius: isHovered ? 15 : 8, 
+                color: Color.black.opacity(isHovered ? 0.3 : 0.15), 
+                radius: isHovered ? 20 : 10, 
                 x: 0, 
-                y: isHovered ? 8 : 4
+                y: isHovered ? 10 : 5
+            )
+            .shadow(
+                color: isFocused ? Color.accent.opacity(0.2) : Color.clear,
+                radius: isFocused ? 15 : 0,
+                x: 0,
+                y: 0
             )
         )
-        .scaleEffect(isHovered ? 1.01 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .animation(.interactiveSpring(response: 0.4, dampingFraction: 0.8, blendDuration: 0.2), value: isHovered)
+        .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.9, blendDuration: 0.15), value: isFocused)
         .onHover { hovering in
             isHovered = hovering
         }

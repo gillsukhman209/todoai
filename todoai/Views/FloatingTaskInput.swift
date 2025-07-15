@@ -57,8 +57,12 @@ struct FloatingTaskInput: View {
             .padding(.vertical, 12)
             .background(inputBackground)
             .onTapGesture {
-                isInputFocused = true
+                withAnimation(.interactiveSpring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2)) {
+                    isInputFocused = true
+                }
             }
+            .scaleEffect(isInputFocused ? 1.02 : 1.0)
+            .animation(.interactiveSpring(response: 0.4, dampingFraction: 0.75, blendDuration: 0.25), value: isInputFocused)
             
             // Status message
             if !viewModel.statusMessage.isEmpty {
@@ -80,25 +84,75 @@ struct FloatingTaskInput: View {
     }
     
     private var inputBackground: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color.cardBackground)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(
-                        isInputFocused ? Color.accent.opacity(0.6) : Color.white.opacity(0.2),
-                        lineWidth: isInputFocused ? 2 : 1
+        ZStack {
+            // Advanced liquid glass base
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.cardBackground)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .opacity(0.9)
+                )
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(.thickMaterial)
+                        .opacity(0.4)
+                )
+            
+            // Liquid glass border with glow
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(
+                    isInputFocused ? Color.accent.opacity(0.8) : Color.glassBorder,
+                    lineWidth: isInputFocused ? 2.5 : 1.5
+                )
+                .opacity(isInputFocused ? 1.0 : 0.7)
+            
+            // Inner glass highlight
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.4),
+                            Color.clear,
+                            Color.white.opacity(0.2)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+                .opacity(0.6)
+            
+            // Focus liquid effect
+            if isInputFocused {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.accent.opacity(0.1),
+                                Color.clear,
+                                Color.accentSecondary.opacity(0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-            )
-            .shadow(
-                color: Color.black.opacity(0.3),
-                radius: isInputFocused ? 20 : 12,
-                x: 0,
-                y: isInputFocused ? 8 : 4
-            )
+                    .blendMode(.overlay)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+        }
+        .shadow(
+            color: Color.black.opacity(0.25),
+            radius: isInputFocused ? 25 : 15,
+            x: 0,
+            y: isInputFocused ? 12 : 6
+        )
+        .shadow(
+            color: isInputFocused ? Color.accent.opacity(0.3) : Color.clear,
+            radius: isInputFocused ? 20 : 0,
+            x: 0,
+            y: 0
+        )
     }
     
     private var trailingButtonView: some View {
@@ -114,8 +168,8 @@ struct FloatingTaskInput: View {
                         .foregroundColor(Color.accent)
                 }
                 .buttonStyle(.plain)
-                .scaleEffect(isInputFocused ? 1.1 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isInputFocused)
+                .scaleEffect(isInputFocused ? 1.15 : 1.0)
+                .animation(.interactiveSpring(response: 0.25, dampingFraction: 0.7, blendDuration: 0.2), value: isInputFocused)
             }
         }
     }
@@ -266,18 +320,44 @@ struct ExampleTooltip: View {
         }
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.cardBackground)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
-                )
+            ZStack {
+                // Liquid glass base
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.cardBackground)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .opacity(0.8)
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.thickMaterial)
+                            .opacity(0.3)
+                    )
+                
+                // Liquid glass border
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.glassBorder, lineWidth: 1)
+                
+                // Inner glass highlight
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.3),
+                                Color.clear,
+                                Color.white.opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+                    .opacity(0.6)
+            }
         )
-        .shadow(color: Color.black.opacity(0.2), radius: 12, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(0.2), radius: 15, x: 0, y: 6)
+        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
     }
 }
 
@@ -304,12 +384,35 @@ struct ExampleCard: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
-                )
+            ZStack {
+                // Liquid glass base
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.05))
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .opacity(0.3)
+                    )
+                
+                // Liquid glass border
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                
+                // Inner glass highlight
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.2),
+                                Color.clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+                    .opacity(0.6)
+            }
         )
     }
 }
