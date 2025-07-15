@@ -22,6 +22,10 @@ final class Todo: Identifiable {
     var originalInput: String? // Store the original natural language input
     var aiDescription: String? // Store AI-generated description/context
     
+    // MARK: - Background Processing Properties
+    var isProcessing: Bool = false // Track if OpenAI parsing is in progress
+    var processingError: String? // Track any errors during background processing
+    
     // MARK: - Computed Properties
     var isRecurring: Bool {
         return recurrenceConfig?.isRecurring ?? false

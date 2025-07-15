@@ -793,22 +793,41 @@ struct TodoRowView: View {
                     )
             } else {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(todo.title)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(todo.isCompleted ? Color.tertiaryText : Color.primaryText)
-                        .strikethrough(todo.isCompleted, color: Color.tertiaryText)
-                        .onTapGesture(count: 2) {
-                            startEditing()
-                        }
-                        .contextMenu {
-                            Button("Edit") {
+                    HStack(spacing: 8) {
+                        Text(todo.title)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(todo.isCompleted ? Color.tertiaryText : Color.primaryText)
+                            .strikethrough(todo.isCompleted, color: Color.tertiaryText)
+                            .onTapGesture(count: 2) {
                                 startEditing()
                             }
-                            Divider()
-                            Button("Delete", role: .destructive) {
-                                onDelete()
+                            .contextMenu {
+                                Button("Edit") {
+                                    startEditing()
+                                }
+                                Divider()
+                                Button("Delete", role: .destructive) {
+                                    onDelete()
+                                }
                             }
+                        
+                        Spacer()
+                        
+                        // Processing indicator
+                        if todo.isProcessing {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .progressViewStyle(CircularProgressViewStyle(tint: Color.accent))
                         }
+                        
+                        // Processing error indicator
+                        if let processingError = todo.processingError {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.orange)
+                                .help(processingError)
+                        }
+                    }
                     
                     // Schedule information
                     if !todo.scheduleDescription.isEmpty {

@@ -84,6 +84,37 @@ final class TaskCreationViewModel: ObservableObject {
         return Todo(title: cleanTitle, originalInput: input)
     }
     
+    /// Convert weekday strings to integers (1 = Sunday, 2 = Monday, etc.)
+    private func convertWeekdaysToIntegers(_ weekdays: [String]) -> [Int] {
+        return weekdays.compactMap { weekday in
+            switch weekday.lowercased() {
+            case "sunday", "sun":
+                return 1
+            case "monday", "mon":
+                return 2
+            case "tuesday", "tue":
+                return 3
+            case "wednesday", "wed":
+                return 4
+            case "thursday", "thu":
+                return 5
+            case "friday", "fri":
+                return 6
+            case "saturday", "sat":
+                return 7
+            default:
+                return nil
+            }
+        }
+    }
+    
+    /// Convert time strings to Date objects
+    private func convertTimesToDates(_ times: [String]) -> [Date] {
+        return times.compactMap { timeString in
+            Date.from(timeString: timeString)
+        }
+    }
+    
     /// Parse natural language input using OpenAI
     func parseNaturalLanguageTask() async {
         guard !input.trimmingCharacters(in: .whitespaces).isEmpty else { return }
@@ -140,7 +171,7 @@ final class TaskCreationViewModel: ObservableObject {
     
 
     
-    /// Main entry point for creating todos - instant for simple todos, OpenAI for complex ones
+    /// Main entry point for creating todos - instant creation with background processing
     func createTodo() async {
         guard !input.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         
@@ -151,14 +182,8 @@ final class TaskCreationViewModel: ObservableObject {
             logger.info("⚡ TaskCreationViewModel: No scheduling keywords detected, creating simple todo instantly")
             await createSimpleTodoInstantly()
         } else {
-            logger.info("🔄 TaskCreationViewModel: Scheduling keywords detected, using OpenAI parsing")
-            // Parse the natural language input
-            await parseNaturalLanguageTask()
-            
-            // If parsing was successful, immediately create the todo
-            if case .parsed(let parsedData) = state {
-                await createTodoFromParsedData(parsedData)
-            }
+            logger.info("🔄 TaskCreationViewModel: Scheduling keywords detected, creating todo instantly then processing in background")
+            await createTodoWithBackgroundProcessing()
         }
     }
     
@@ -177,6 +202,143 @@ final class TaskCreationViewModel: ObservableObject {
             let errorMessage = "Failed to create simple todo: \(error.localizedDescription)"
             state = .error(errorMessage)
             logger.error("❌ \(errorMessage)")
+        }
+    }
+    
+    /// Create todo instantly, then process with OpenAI in background
+    private func createTodoWithBackgroundProcessing() async {
+        state = .creating
+        
+        do {
+            // Phase 1: Create todo instantly with raw text
+            let todo = createSimpleTodo()
+            todo.isProcessing = true
+            modelContext.insert(todo)
+            try modelContext.save()
+            
+            state = .completed
+            logger.info("⚡ Successfully created todo instantly: '\(todo.title)' - processing in background")
+            
+            // Phase 2: Process with OpenAI in background
+            Task {
+                await processExistingTodoWithOpenAI(todo)
+            }
+            
+        } catch {
+            let errorMessage = "Failed to create todo: \(error.localizedDescription)"
+            state = .error(errorMessage)
+            logger.error("❌ \(errorMessage)")
+        }
+    }
+    
+    /// Process an existing todo with OpenAI and update it
+    private func processExistingTodoWithOpenAI(_ todo: Todo) async {
+        logger.info("🔄 Processing todo with OpenAI: '\(todo.title)'")
+        
+        // Check if API key is set up
+        let apiKey = UserDefaults.standard.string(forKey: "openai_api_key") ?? ""
+        if apiKey.isEmpty {
+            logger.error("❌ OpenAI API key not set, cannot process todo")
+            await MainActor.run {
+                todo.isProcessing = false
+                todo.processingError = "OpenAI API key not set"
+                try? modelContext.save()
+            }
+            return
+        }
+        
+        do {
+            // Parse with OpenAI using the original input
+            let parsedData = try await openAIService.parseTask(todo.originalInput ?? todo.title)
+            
+            await MainActor.run {
+                // Update todo with parsed data
+                todo.title = parsedData.cleanTitle
+                todo.aiDescription = parsedData.description
+                
+                // Set due date/time for one-time tasks
+                if let dueDateString = parsedData.dueDate {
+                    if let date = Date.from(dateString: dueDateString) {
+                        todo.dueDate = date
+                    } else {
+                        todo.dueDate = ISO8601DateFormatter().date(from: dueDateString)
+                    }
+                }
+                
+                if let dueTimeString = parsedData.dueTime {
+                    todo.dueTime = Date.from(timeString: dueTimeString)
+                }
+                
+                // Set recurrence configuration
+                if parsedData.recurrenceType != "none" {
+                    let config = RecurrenceConfig()
+                    
+                    // Map recurrence type properly
+                    switch parsedData.recurrenceType {
+                    case "daily":
+                        config.type = .daily
+                    case "weekly":
+                        config.type = .weekly
+                    case "monthly":
+                        config.type = .monthly
+                    default:
+                        if let recurrenceType = RecurrenceType(rawValue: parsedData.recurrenceType) {
+                            config.type = recurrenceType
+                        }
+                    }
+                    
+                    // Set specific weekdays for "specific_days" recurrence type
+                    if parsedData.recurrenceType == "specific_days",
+                       let weekdays = parsedData.specificWeekdays {
+                        config.specificWeekdays = convertWeekdaysToIntegers(weekdays)
+                    }
+                    
+                    // Set specific times
+                    if let times = parsedData.specificTimes {
+                        config.specificTimes = convertTimesToDates(times)
+                    }
+                    
+                    // Set time range
+                    if let startTime = parsedData.timeRangeStart,
+                       let endTime = parsedData.timeRangeEnd,
+                       let startTimeDate = Date.from(timeString: startTime),
+                       let endTimeDate = Date.from(timeString: endTime) {
+                        config.timeRange = TimeRange(startTime: startTimeDate, endTime: endTimeDate)
+                    }
+                    
+                    // Set monthly day
+                    if let monthlyDay = parsedData.monthlyDay {
+                        config.monthlyDay = monthlyDay
+                    }
+                    
+                    // Set interval
+                    if let interval = parsedData.interval {
+                        config.interval = interval
+                    }
+                    
+                    todo.recurrenceConfig = config
+                }
+                
+                // Clear processing state
+                todo.isProcessing = false
+                todo.processingError = nil
+                
+                try? modelContext.save()
+                logger.info("✅ Successfully processed todo with OpenAI: '\(todo.title)'")
+                
+                // Auto-schedule notification if needed
+                Task {
+                    await autoScheduleNotificationIfNeeded(for: todo, parsedData: parsedData)
+                }
+            }
+            
+        } catch {
+            logger.error("❌ Failed to process todo with OpenAI: \(error.localizedDescription)")
+            await MainActor.run {
+                todo.isProcessing = false
+                todo.processingError = "Failed to process: \(error.localizedDescription)"
+                try? modelContext.save()
+            }
         }
     }
     
