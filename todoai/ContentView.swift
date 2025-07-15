@@ -469,6 +469,7 @@ struct AddTodoRow: View {
                 .font(.system(size: 15, weight: .medium))
                 .foregroundColor(Color.primaryText)
                 .focused($isNewTodoFocused)
+                .textFieldStyle(.plain)
                 .onSubmit {
                     onAddTodo()
                 }
@@ -484,10 +485,6 @@ struct AddTodoRow: View {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(.ultraThinMaterial)
                     )
-                
-                // Subtle border
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
             }
             .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
         )
@@ -505,13 +502,19 @@ struct TodoRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Professional checkbox
+            // Professional checkbox with better hit area
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     onToggleComplete()
                 }
             }) {
                 ZStack {
+                    // Larger invisible hit area
+                    Circle()
+                        .fill(Color.clear)
+                        .frame(width: 32, height: 32)
+                    
+                    // Visible checkbox
                     Circle()
                         .fill(todo.isCompleted ? Color.accent : Color.clear)
                         .frame(width: 20, height: 20)
@@ -530,7 +533,8 @@ struct TodoRowView: View {
                     }
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
+            .contentShape(Circle())
             
             // Clean title
             if isEditing {
