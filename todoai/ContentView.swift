@@ -235,16 +235,16 @@ struct ContentView: View {
             }
         }
         .background(
-            // Premium singular gradient - Stunning purple-to-teal spectrum
+            // Dark black gradient - Sophisticated deep black spectrum
             LinearGradient(
                 colors: [
-                    Color(red: 0.25, green: 0.12, blue: 0.40),   // Rich deep purple
-                    Color(red: 0.22, green: 0.15, blue: 0.45),   // Purple-violet
-                    Color(red: 0.18, green: 0.20, blue: 0.50),   // Blue-purple
-                    Color(red: 0.15, green: 0.25, blue: 0.55),   // Deep blue
-                    Color(red: 0.12, green: 0.35, blue: 0.60),   // Ocean blue
-                    Color(red: 0.10, green: 0.45, blue: 0.65),   // Blue-teal
-                    Color(red: 0.08, green: 0.55, blue: 0.70)    // Beautiful teal
+                    Color(red: 0.05, green: 0.05, blue: 0.05),   // Very dark gray
+                    Color(red: 0.08, green: 0.08, blue: 0.08),   // Dark gray
+                    Color(red: 0.12, green: 0.12, blue: 0.12),   // Medium dark gray
+                    Color(red: 0.15, green: 0.15, blue: 0.15),   // Lighter dark gray
+                    Color(red: 0.10, green: 0.10, blue: 0.10),   // Back to darker
+                    Color(red: 0.06, green: 0.06, blue: 0.06),   // Very dark
+                    Color(red: 0.02, green: 0.02, blue: 0.02)    // Almost black
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -451,14 +451,14 @@ struct FloatingSidebarView: View {
         }
         .frame(width: 260)
         .background(
-            // Premium sidebar gradient - Purple/teal theme
+            // Dark black sidebar gradient - Sophisticated black theme
             ZStack {
                 // Main gradient
                 LinearGradient(
                     colors: [
-                        Color(red: 0.28, green: 0.15, blue: 0.42).opacity(0.95),   // Deep purple
-                        Color(red: 0.22, green: 0.25, blue: 0.48).opacity(0.9),   // Purple-blue
-                        Color(red: 0.18, green: 0.35, blue: 0.55).opacity(0.95)   // Blue-teal
+                        Color(red: 0.08, green: 0.08, blue: 0.08).opacity(0.95),   // Dark gray
+                        Color(red: 0.12, green: 0.12, blue: 0.12).opacity(0.9),   // Medium dark gray
+                        Color(red: 0.06, green: 0.06, blue: 0.06).opacity(0.95)   // Very dark gray
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
