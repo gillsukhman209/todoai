@@ -102,38 +102,37 @@ struct ContentView: View {
         }
     }
     
-    private var groupedUpcomingTodos: [(String, [Todo])] {
+    private var groupedUpcomingTodos: [(String, Date, [Todo])] {
         let calendar = Calendar.current
         let today = Date()
-        var groups: [String: [Todo]] = [:]
+        var groups: [(String, Date, [Todo])] = []
         
-        // Create groups for each day of the week
+        // Create groups for each day of the week (always show all 7 days)
         for i in 0..<7 {
             let date = calendar.date(byAdding: .day, value: i, to: calendar.startOfDay(for: today))!
             let dayName = calendar.weekdaySymbols[calendar.component(.weekday, from: date) - 1]
             let dateString = i == 0 ? "Today" : (i == 1 ? "Tomorrow" : dayName)
-            groups[dateString] = []
+            groups.append((dateString, date, []))
         }
         
         // Group todos by their due date or creation date
-        for todo in upcomingTodos {
+        for todo in todos { // Use all todos, not just upcomingTodos
             let targetDate = todo.dueDate ?? todo.createdAt
             let daysDiff = calendar.dateComponents([.day], from: calendar.startOfDay(for: today), to: calendar.startOfDay(for: targetDate)).day ?? 0
             
             if daysDiff >= 0 && daysDiff < 7 {
-                let date = calendar.date(byAdding: .day, value: daysDiff, to: calendar.startOfDay(for: today))!
-                let dayName = calendar.weekdaySymbols[calendar.component(.weekday, from: date) - 1]
-                let dateString = daysDiff == 0 ? "Today" : (daysDiff == 1 ? "Tomorrow" : dayName)
-                groups[dateString, default: []].append(todo)
+                if let index = groups.firstIndex(where: { Calendar.current.isDate($0.1, inSameDayAs: targetDate) }) {
+                    groups[index].2.append(todo)
+                }
             }
         }
         
-        // Return in order: Today, Tomorrow, then days of the week
-        let orderedKeys = ["Today", "Tomorrow"] + calendar.weekdaySymbols.filter { !["Today", "Tomorrow"].contains($0) }
-        return orderedKeys.compactMap { key in
-            guard let todos = groups[key], !todos.isEmpty else { return nil }
-            return (key, todos.sorted { $0.createdAt > $1.createdAt })
+        // Sort todos within each day
+        for i in 0..<groups.count {
+            groups[i].2.sort { $0.createdAt > $1.createdAt }
         }
+        
+        return groups
     }
     
     var body: some View {
@@ -146,6 +145,7 @@ struct ContentView: View {
                 onDeleteTodo: deleteTodo,
                 onToggleComplete: toggleTodoComplete,
                 onScheduleTodo: showSchedulingView,
+                onMoveTodo: moveTodoToDay,
                 onCompleteCleanup: completeCleanup,
                 showSidebar: $showSidebar,
                 showingNaturalLanguageInput: $showingNaturalLanguageInput
@@ -292,6 +292,23 @@ struct ContentView: View {
         selectedTodoForScheduling = todo
         withAnimation(.easeInOut(duration: 0.3)) {
             showingSchedulingView = true
+        }
+    }
+    
+    private func moveTodoToDay(_ todo: Todo, to targetDate: Date) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            // Update the todo's due date to the target date
+            todo.dueDate = targetDate
+            
+            // Keep the same time if it exists, otherwise set to current time
+            if let existingTime = todo.dueTime {
+                let calendar = Calendar.current
+                let timeComponents = calendar.dateComponents([.hour, .minute], from: existingTime)
+                todo.dueDate = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: targetDate)
+            }
+            
+            // Save the changes
+            try? modelContext.save()
         }
     }
     
@@ -518,10 +535,11 @@ struct SidebarItemView: View {
 struct TodoListView: View {
     let todos: [Todo]
     let selectedView: TodoViewType
-    let groupedUpcomingTodos: [(String, [Todo])]
+    let groupedUpcomingTodos: [(String, Date, [Todo])]
     let onDeleteTodo: (Todo) -> Void
     let onToggleComplete: (Todo) -> Void
     let onScheduleTodo: (Todo) -> Void
+    let onMoveTodo: (Todo, Date) -> Void
     let onCompleteCleanup: () async -> Void
     @Binding var showSidebar: Bool
     @Binding var showingNaturalLanguageInput: Bool
@@ -619,45 +637,26 @@ struct TodoListView: View {
                 LazyVStack(spacing: 8) {
                     if selectedView == .upcoming {
                         // Upcoming view - grouped by day
-                        ForEach(groupedUpcomingTodos, id: \.0) { dayName, dayTodos in
-                            VStack(spacing: 12) {
-                                HStack {
-                                    Text(dayName)
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundColor(Color.secondaryText)
-                                    
-                                    Spacer()
-                                    
-                                    Text("\(dayTodos.count)")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(Color.tertiaryText)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Color.tertiaryText.opacity(0.1))
-                                        .clipShape(Capsule())
+                        ForEach(groupedUpcomingTodos, id: \.0) { dayName, dayDate, dayTodos in
+                            DayGroupView(
+                                dayName: dayName,
+                                dayDate: dayDate,
+                                dayTodos: dayTodos,
+                                allTodos: todos,
+                                isFirst: dayName == groupedUpcomingTodos.first?.0,
+                                onToggleComplete: onToggleComplete,
+                                onDeleteTodo: onDeleteTodo,
+                                onScheduleTodo: onScheduleTodo,
+                                onMoveTodo: onMoveTodo,
+                                focusedTodoID: focusedTodoID,
+                                onFocus: { focusedTodoID = $0 },
+                                editingTodoID: editingTodoID,
+                                onEditingChange: { isEditing in
+                                    if !isEditing {
+                                        editingTodoID = nil
+                                    }
                                 }
-                                .padding(.horizontal, 32)
-                                .padding(.top, dayName == groupedUpcomingTodos.first?.0 ? 0 : 24)
-                                
-                                ForEach(dayTodos) { todo in
-                                    TodoRowView(
-                                        todo: todo,
-                                        onToggleComplete: { onToggleComplete(todo) },
-                                        onDelete: { onDeleteTodo(todo) },
-                                        onSchedule: { onScheduleTodo(todo) },
-                                        isFocused: focusedTodoID == todo.id,
-                                        onFocus: { focusedTodoID = todo.id },
-                                        isEditingTriggered: editingTodoID == todo.id,
-                                        onEditingChange: { isEditing in
-                                            if !isEditing {
-                                                editingTodoID = nil
-                                            }
-                                        }
-                                    )
-                                    .padding(.horizontal, 32)
-                                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                                }
-                            }
+                            )
                         }
                     } else {
                         // Regular view (Inbox or Today)
@@ -1147,6 +1146,173 @@ struct TodoRowView: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             isEditing = false
             isEditingFocused = false
+        }
+    }
+}
+
+// MARK: - Day Group View with Drag & Drop
+struct DayGroupView: View {
+    let dayName: String
+    let dayDate: Date
+    let dayTodos: [Todo]
+    let allTodos: [Todo]  // Added to find todos by ID for drag & drop
+    let isFirst: Bool
+    let onToggleComplete: (Todo) -> Void
+    let onDeleteTodo: (Todo) -> Void
+    let onScheduleTodo: (Todo) -> Void
+    let onMoveTodo: (Todo, Date) -> Void
+    let focusedTodoID: UUID?
+    let onFocus: (UUID) -> Void
+    let editingTodoID: UUID?
+    let onEditingChange: (Bool) -> Void
+    
+    @State private var isDropTargeted = false
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            // Day Header
+            HStack {
+                Text(dayName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(Color.secondaryText)
+                
+                Spacer()
+                
+                HStack(spacing: 8) {
+                    // Add task button
+                    Button(action: {
+                        let newTodo = Todo(title: "New task for \(dayName)")
+                        newTodo.dueDate = dayDate
+                        // Add to context and save
+                        // Note: This is a simplified implementation - in a real app you'd want to open a proper input dialog
+                        print("Add task for \(dayName) on \(dayDate)")
+                    }) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Color.accent.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Task count
+                    Text("\(dayTodos.count)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color.tertiaryText)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.tertiaryText.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.horizontal, 32)
+            .padding(.top, isFirst ? 0 : 24)
+            
+            // Drop Zone
+            VStack(spacing: 8) {
+                if dayTodos.isEmpty {
+                    // Empty state with drop zone
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(isDropTargeted ? Color.accent.opacity(0.2) : Color.clear)
+                        .stroke(
+                            isDropTargeted ? Color.accent : Color.white.opacity(0.1),
+                            style: StrokeStyle(lineWidth: 2, dash: isDropTargeted ? [] : [8, 4])
+                        )
+                        .frame(height: 60)
+                        .overlay(
+                            Text(isDropTargeted ? "Drop here" : "No tasks • Drag tasks here")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(isDropTargeted ? Color.accent : Color.tertiaryText)
+                        )
+                        .padding(.horizontal, 32)
+                        .dropDestination(for: TodoReference.self) { todoRefs, location in
+                            guard let todoRef = todoRefs.first,
+                                  let todo = allTodos.first(where: { $0.id == todoRef.id }) else { return false }
+                            onMoveTodo(todo, dayDate)
+                            return true
+                        } isTargeted: { targeted in
+                            isDropTargeted = targeted
+                        }
+                } else {
+                    // Tasks with drop zone
+                    ForEach(dayTodos) { todo in
+                        DraggableTodoRowView(
+                            todo: todo,
+                            onToggleComplete: { onToggleComplete(todo) },
+                            onDelete: { onDeleteTodo(todo) },
+                            onSchedule: { onScheduleTodo(todo) },
+                            isFocused: focusedTodoID == todo.id,
+                            onFocus: { onFocus(todo.id) },
+                            isEditingTriggered: editingTodoID == todo.id,
+                            onEditingChange: onEditingChange
+                        )
+                        .padding(.horizontal, 32)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    }
+                    
+                    // Drop zone between tasks
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isDropTargeted ? Color.accent.opacity(0.1) : Color.clear)
+                        .stroke(
+                            isDropTargeted ? Color.accent : Color.clear,
+                            style: StrokeStyle(lineWidth: 2)
+                        )
+                        .frame(height: isDropTargeted ? 40 : 20)
+                        .overlay(
+                            Text(isDropTargeted ? "Drop here" : "")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color.accent)
+                        )
+                        .padding(.horizontal, 32)
+                        .dropDestination(for: TodoReference.self) { todoRefs, location in
+                            guard let todoRef = todoRefs.first,
+                                  let todo = allTodos.first(where: { $0.id == todoRef.id }) else { return false }
+                            onMoveTodo(todo, dayDate)
+                            return true
+                        } isTargeted: { targeted in
+                            isDropTargeted = targeted
+                        }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Draggable Todo Row View
+struct DraggableTodoRowView: View {
+    var todo: Todo
+    let onToggleComplete: () -> Void
+    let onDelete: () -> Void
+    let onSchedule: () -> Void
+    let isFocused: Bool
+    let onFocus: () -> Void
+    let isEditingTriggered: Bool
+    let onEditingChange: (Bool) -> Void
+    
+    var body: some View {
+        TodoRowView(
+            todo: todo,
+            onToggleComplete: onToggleComplete,
+            onDelete: onDelete,
+            onSchedule: onSchedule,
+            isFocused: isFocused,
+            onFocus: onFocus,
+            isEditingTriggered: isEditingTriggered,
+            onEditingChange: onEditingChange
+        )
+        .draggable(TodoReference(id: todo.id)) {
+            // Drag preview
+            HStack {
+                Image(systemName: "doc.text")
+                    .foregroundColor(Color.accent)
+                Text(todo.title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color.primaryText)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.cardBackground)
+            .cornerRadius(8)
+            .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
         }
     }
 }
