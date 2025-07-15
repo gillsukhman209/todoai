@@ -42,6 +42,48 @@ final class TaskCreationViewModel: ObservableObject {
     
     // MARK: - Public Methods
     
+    /// Detect if input contains scheduling keywords
+    private func containsSchedulingKeywords(_ input: String) -> Bool {
+        let schedulingKeywords = [
+            // Time indicators
+            "at", "by", "before", "after", "around", "pm", "am", "p.m.", "a.m.",
+            // Date indicators  
+            "today", "tomorrow", "tonight", "morning", "afternoon", "evening", "night",
+            "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+            "mon", "tue", "wed", "thu", "fri", "sat", "sun",
+            "next", "this", "last", "week", "month", "year",
+            // Recurrence indicators
+            "every", "each", "daily", "weekly", "monthly", "yearly",
+            "repeat", "recurring", "regularly", "schedule",
+            // Reminder indicators
+            "remind", "reminder", "alert", "notify", "notification",
+            // Due date indicators
+            "due", "deadline", "expires", "until", "through"
+        ]
+        
+        let lowercased = input.lowercased()
+        
+        // Use word boundaries to avoid false positives
+        // e.g., "category" shouldn't match "at" 
+        for keyword in schedulingKeywords {
+            let pattern = "\\b\(NSRegularExpression.escapedPattern(for: keyword))\\b"
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let range = NSRange(location: 0, length: lowercased.count)
+                if regex.firstMatch(in: lowercased, options: [], range: range) != nil {
+                    return true
+                }
+            }
+        }
+        
+        return false
+    }
+    
+    /// Create a simple todo instantly without OpenAI parsing
+    private func createSimpleTodo() -> Todo {
+        let cleanTitle = input.trimmingCharacters(in: .whitespaces)
+        return Todo(title: cleanTitle, originalInput: input)
+    }
+    
     /// Parse natural language input using OpenAI
     func parseNaturalLanguageTask() async {
         guard !input.trimmingCharacters(in: .whitespaces).isEmpty else { return }
@@ -98,14 +140,43 @@ final class TaskCreationViewModel: ObservableObject {
     
 
     
-    /// Main entry point for creating todos - now directly creates after parsing
+    /// Main entry point for creating todos - instant for simple todos, OpenAI for complex ones
     func createTodo() async {
-        // Parse the natural language input
-        await parseNaturalLanguageTask()
+        guard !input.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         
-        // If parsing was successful, immediately create the todo
-        if case .parsed(let parsedData) = state {
-            await createTodoFromParsedData(parsedData)
+        logger.info("🚀 TaskCreationViewModel: Processing input: '\(self.input)'")
+        
+        // Check if this is a simple todo (no scheduling keywords)
+        if !containsSchedulingKeywords(input) {
+            logger.info("⚡ TaskCreationViewModel: No scheduling keywords detected, creating simple todo instantly")
+            await createSimpleTodoInstantly()
+        } else {
+            logger.info("🔄 TaskCreationViewModel: Scheduling keywords detected, using OpenAI parsing")
+            // Parse the natural language input
+            await parseNaturalLanguageTask()
+            
+            // If parsing was successful, immediately create the todo
+            if case .parsed(let parsedData) = state {
+                await createTodoFromParsedData(parsedData)
+            }
+        }
+    }
+    
+    /// Create a simple todo instantly without OpenAI processing
+    private func createSimpleTodoInstantly() async {
+        state = .creating
+        
+        do {
+            let todo = createSimpleTodo()
+            modelContext.insert(todo)
+            try modelContext.save()
+            
+            state = .completed
+            logger.info("⚡ Successfully created simple todo instantly: '\(todo.title)'")
+        } catch {
+            let errorMessage = "Failed to create simple todo: \(error.localizedDescription)"
+            state = .error(errorMessage)
+            logger.error("❌ \(errorMessage)")
         }
     }
     
