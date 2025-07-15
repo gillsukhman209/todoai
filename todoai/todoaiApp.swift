@@ -7,18 +7,22 @@
 
 import SwiftUI
 import SwiftData
+import AppKit
 
 @main
 struct todoaiApp: App {
+    @StateObject private var notificationDelegate = NotificationDelegate.shared
+    @StateObject private var backgroundTaskManager = BackgroundTaskManager.shared
+    
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([Todo.self])
+        let schema = Schema([Todo.self, TimeRange.self, RecurrenceConfig.self])
         let modelConfiguration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false
         )
         
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return try ModelContainer(for: schema, configurations: modelConfiguration)
         } catch {
             print("Failed to create ModelContainer: \(error)")
             // Create directory if it doesn't exist
@@ -34,7 +38,7 @@ struct todoaiApp: App {
             )
             
             do {
-                return try ModelContainer(for: schema, configurations: [config])
+                return try ModelContainer(for: schema, configurations: config)
             } catch {
                 print("Second attempt failed: \(error)")
                 // Last resort: create a basic persistent container
@@ -50,6 +54,25 @@ struct todoaiApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(notificationDelegate)
+                .environmentObject(backgroundTaskManager)
+                .onAppear {
+                    // Set up the model context for services
+                    notificationDelegate.setModelContext(sharedModelContainer.mainContext)
+                    backgroundTaskManager.setModelContext(sharedModelContainer.mainContext)
+                    
+                    // Enable background processing
+                    backgroundTaskManager.enableBackgroundProcessing()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+                    backgroundTaskManager.handleAppDidEnterBackground()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willBecomeActiveNotification)) { _ in
+                    backgroundTaskManager.handleAppWillEnterForeground()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    backgroundTaskManager.handleAppDidBecomeActive()
+                }
         }
         .modelContainer(sharedModelContainer)
         .defaultSize(width: 800, height: 600)

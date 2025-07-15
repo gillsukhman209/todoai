@@ -30,21 +30,28 @@ extension Color {
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var todos: [Todo]
-    @State private var newTodoTitle = ""
-    @State private var isAddingTodo = false
     @State private var showSidebar = true
+    @State private var showingNaturalLanguageInput = false
+    @State private var showingAPIKeySetup = false
+    @State private var showingSchedulingView = false
+    @State private var selectedTodoForScheduling: Todo?
+    @State private var taskCreationViewModel: TaskCreationViewModel?
+    
+    init() {
+        // Initialize the state as nil - will be properly set up in onAppear
+        _taskCreationViewModel = State(initialValue: nil)
+    }
     
     var body: some View {
         ZStack(alignment: .leading) {
             // Main content area
             TodoListView(
                 todos: todos, 
-                newTodoTitle: $newTodoTitle, 
-                isAddingTodo: $isAddingTodo,
-                onAddTodo: addTodo,
                 onDeleteTodo: deleteTodo,
                 onToggleComplete: toggleTodoComplete,
-                showSidebar: $showSidebar
+                onScheduleTodo: showSchedulingView,
+                showSidebar: $showSidebar,
+                showingNaturalLanguageInput: $showingNaturalLanguageInput
             )
             .padding(.leading, showSidebar ? 280 : 0)
             .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showSidebar)
@@ -57,12 +64,64 @@ struct ContentView: View {
                         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                             showSidebar = false
                         }
+                    },
+                    onSettings: {
+                        showingAPIKeySetup = true
                     }
                 )
                 .transition(.asymmetric(
                     insertion: .move(edge: .leading).combined(with: .opacity),
                     removal: .move(edge: .leading).combined(with: .opacity)
                 ))
+            }
+            
+            // Natural Language Input Overlay
+            if showingNaturalLanguageInput, let viewModel = taskCreationViewModel {
+                NaturalLanguageInputOverlay(
+                    viewModel: viewModel,
+                    isShowing: $showingNaturalLanguageInput
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .zIndex(100)
+            }
+            
+            // API Key Setup Overlay
+            if showingAPIKeySetup {
+                ZStack {
+                    Color.black.opacity(0.6)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            showingAPIKeySetup = false
+                        }
+                    
+                    APIKeySetupView(isPresented: $showingAPIKeySetup)
+                        .padding(32)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .zIndex(200)
+            }
+            
+            // Scheduling View Overlay
+            if showingSchedulingView, let selectedTodo = selectedTodoForScheduling {
+                ZStack {
+                    Color.black.opacity(0.6)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            showingSchedulingView = false
+                            selectedTodoForScheduling = nil
+                        }
+                    
+                    SchedulingView(
+                        todo: selectedTodo,
+                        onScheduled: {
+                            showingSchedulingView = false
+                            selectedTodoForScheduling = nil
+                        }
+                    )
+                    .padding(32)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .zIndex(300)
             }
         }
         .background(
@@ -83,21 +142,37 @@ struct ContentView: View {
             .ignoresSafeArea(.all) // Extend into title bar area
         )
         .preferredColorScheme(.dark) // Ensure dark mode for proper text contrast
-    }
-    
-    private func addTodo() {
-        guard !newTodoTitle.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        
-        withAnimation(.easeInOut(duration: 0.25)) {
-            let newTodo = Todo(title: newTodoTitle.trimmingCharacters(in: .whitespaces))
-            modelContext.insert(newTodo)
-            newTodoTitle = ""
-            isAddingTodo = false
+        .onAppear {
+            self.setupTaskCreationViewModel()
+        }
+        .onChange(of: taskCreationViewModel?.state) { oldValue, newValue in
+            if case .completed = newValue {
+                // Hide the natural language input when task is created
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.showingNaturalLanguageInput = false
+                }
+            }
         }
     }
     
+    private func setupTaskCreationViewModel() {
+        // Initialize the view model with the proper model context
+        // API key is read from UserDefaults - set it up via Settings
+        let openAIService = OpenAIService()
+        taskCreationViewModel = TaskCreationViewModel(
+            openAIService: openAIService,
+            modelContext: modelContext
+        )
+    }
+    
+
+    
     private func deleteTodo(_ todo: Todo) {
         withAnimation(.easeInOut(duration: 0.25)) {
+            // Cancel any pending notifications for this task before deleting
+            NotificationService.shared.cancelAllNotifications(for: todo.id)
+            
+            // Delete the task from the database
             modelContext.delete(todo)
         }
     }
@@ -107,11 +182,19 @@ struct ContentView: View {
             todo.isCompleted.toggle()
         }
     }
+    
+    private func showSchedulingView(for todo: Todo) {
+        selectedTodoForScheduling = todo
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showingSchedulingView = true
+        }
+    }
 }
 
 struct FloatingSidebarView: View {
     let activeTodoCount: Int
     let onDismiss: () -> Void
+    let onSettings: () -> Void
     @State private var isHovered = false
     
     var body: some View {
@@ -178,9 +261,32 @@ struct FloatingSidebarView: View {
             Spacer()
             
             // Footer
-            VStack(spacing: 8) {
+            VStack(spacing: 12) {
                 Divider()
                     .background(Color.white.opacity(0.2))
+                
+                // Settings button
+                Button(action: onSettings) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "gear")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Color.secondaryText)
+                            .frame(width: 20)
+                        
+                        Text("Settings")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(Color.secondaryText)
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
+                    )
+                }
+                .buttonStyle(.plain)
                 
                 Text("⌘+B to toggle sidebar")
                     .font(.system(size: 11, weight: .medium))
@@ -281,13 +387,11 @@ struct SidebarItemView: View {
 
 struct TodoListView: View {
     let todos: [Todo]
-    @Binding var newTodoTitle: String
-    @Binding var isAddingTodo: Bool
-    let onAddTodo: () -> Void
     let onDeleteTodo: (Todo) -> Void
     let onToggleComplete: (Todo) -> Void
+    let onScheduleTodo: (Todo) -> Void
     @Binding var showSidebar: Bool
-    @FocusState private var isNewTodoFocused: Bool
+    @Binding var showingNaturalLanguageInput: Bool
     @FocusState private var isMainViewFocused: Bool
     @State private var focusedTodoID: UUID?
     @State private var editingTodoID: UUID?
@@ -346,17 +450,6 @@ struct TodoListView: View {
                 
                 // Clean task list
                 LazyVStack(spacing: 8) {
-                    // Add new todo
-                    if isAddingTodo {
-                        AddTodoRow(
-                            title: $newTodoTitle,
-                            isNewTodoFocused: $isNewTodoFocused,
-                            onAddTodo: onAddTodo,
-                            onCancel: cancelAddingTodo
-                        )
-                        .padding(.horizontal, 32)
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    }
                     
                     // Active todos
                     ForEach(activeTodos) { todo in
@@ -364,6 +457,7 @@ struct TodoListView: View {
                             todo: todo,
                             onToggleComplete: { onToggleComplete(todo) },
                             onDelete: { onDeleteTodo(todo) },
+                            onSchedule: { onScheduleTodo(todo) },
                             isFocused: focusedTodoID == todo.id,
                             onFocus: { focusedTodoID = todo.id },
                             isEditingTriggered: editingTodoID == todo.id,
@@ -403,6 +497,7 @@ struct TodoListView: View {
                                     todo: todo,
                                     onToggleComplete: { onToggleComplete(todo) },
                                     onDelete: { onDeleteTodo(todo) },
+                                    onSchedule: { onScheduleTodo(todo) },
                                     isFocused: focusedTodoID == todo.id,
                                     onFocus: { focusedTodoID = todo.id },
                                     isEditingTriggered: editingTodoID == todo.id,
@@ -463,16 +558,39 @@ struct TodoListView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(action: startAddingTodo) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 28, height: 28)
-                        .background(Color.accent)
-                        .clipShape(Circle())
+                HStack(spacing: 8) {
+                    // AI Smart Input Button
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showingNaturalLanguageInput = true
+                        }
+                    }) {
+                        Image(systemName: "brain.head.profile")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Color.accentSecondary)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(KeyEquivalent("i"), modifiers: [.command])
+                    
+                    // Regular Add Button (now opens AI input)
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showingNaturalLanguageInput = true
+                        }
+                    }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Color.accent)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(KeyEquivalent("n"), modifiers: [.command])
                 }
-                .buttonStyle(.plain)
-                .keyboardShortcut(KeyEquivalent("n"), modifiers: [.command])
             }
         }
         .toolbar {
@@ -490,22 +608,7 @@ struct TodoListView: View {
         }
     }
     
-    private func startAddingTodo() {
-        withAnimation(.easeInOut(duration: 0.25)) {
-            isAddingTodo = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            isNewTodoFocused = true
-        }
-    }
-    
-    private func cancelAddingTodo() {
-        withAnimation(.easeInOut(duration: 0.25)) {
-            isAddingTodo = false
-            newTodoTitle = ""
-            isNewTodoFocused = false
-        }
-    }
+
     
     private func moveFocusUp() {
         let allTodos = activeTodos + completedTodos
@@ -554,55 +657,13 @@ struct TodoListView: View {
     }
 }
 
-struct AddTodoRow: View {
-    @Binding var title: String
-    @FocusState.Binding var isNewTodoFocused: Bool
-    let onAddTodo: () -> Void
-    let onCancel: () -> Void
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            // Clean checkbox
-            Circle()
-                .strokeBorder(Color.accent.opacity(0.3), lineWidth: 1.5)
-                .frame(width: 20, height: 20)
-            
-            // Clean text field
-            TextField("Add a task", text: $title)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(Color.primaryText)
-                .focused($isNewTodoFocused)
-                .textFieldStyle(.plain)
-                .background(Color.clear)
-                .overlay(
-                    Rectangle()
-                        .stroke(Color.clear)
-                )
-                .onSubmit {
-                    onAddTodo()
-                }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            ZStack {
-                // Glass background
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.cardBackground)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                    )
-            }
-            .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
-        )
-    }
-}
+
 
 struct TodoRowView: View {
     var todo: Todo
     let onToggleComplete: () -> Void
     let onDelete: () -> Void
+    let onSchedule: () -> Void
     let isFocused: Bool
     let onFocus: () -> Void
     let isEditingTriggered: Bool
@@ -664,29 +725,59 @@ struct TodoRowView: View {
                             .stroke(Color.clear)
                     )
             } else {
-                Text(todo.title)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(todo.isCompleted ? Color.tertiaryText : Color.primaryText)
-                    .strikethrough(todo.isCompleted, color: Color.tertiaryText)
-                    .onTapGesture(count: 2) {
-                        startEditing()
-                    }
-                    .contextMenu {
-                        Button("Edit") {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(todo.title)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(todo.isCompleted ? Color.tertiaryText : Color.primaryText)
+                        .strikethrough(todo.isCompleted, color: Color.tertiaryText)
+                        .onTapGesture(count: 2) {
                             startEditing()
                         }
-                        Divider()
-                        Button("Delete", role: .destructive) {
-                            onDelete()
+                        .contextMenu {
+                            Button("Edit") {
+                                startEditing()
+                            }
+                            Divider()
+                            Button("Delete", role: .destructive) {
+                                onDelete()
+                            }
                         }
+                    
+                    // Schedule information
+                    if !todo.scheduleDescription.isEmpty {
+                        Text(todo.scheduleDescription)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(Color.tertiaryText)
                     }
+                    
+                    // Original AI input (if available)
+                    if let originalInput = todo.originalInput, !originalInput.isEmpty, originalInput != todo.title {
+                        Text("From: \"\(originalInput)\"")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(Color.accent.opacity(0.6))
+                            .italic()
+                    }
+                }
             }
             
             Spacer()
             
-            // Edit and delete buttons
+            // Edit, schedule, and delete buttons
             if isHovered && !isEditing {
                 HStack(spacing: 8) {
+                    // Schedule button
+                    Button(action: {
+                        onSchedule()
+                    }) {
+                        Image(systemName: "bell")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Color.accentSecondary)
+                            .frame(width: 24, height: 24)
+                            .background(Color.accentSecondary.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    
                     // Edit button
                     Button(action: {
                         startEditing()
@@ -752,13 +843,13 @@ struct TodoRowView: View {
         .onTapGesture {
             onFocus()
         }
-        .onChange(of: isEditingTriggered) { triggered in
-            if triggered && !isEditing {
+        .onChange(of: isEditingTriggered) { oldValue, newValue in
+            if newValue && !isEditing {
                 startEditing()
             }
         }
-        .onChange(of: isEditing) { editing in
-            onEditingChange(editing)
+        .onChange(of: isEditing) { oldValue, newValue in
+            onEditingChange(newValue)
         }
     }
     
