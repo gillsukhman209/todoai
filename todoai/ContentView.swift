@@ -288,6 +288,9 @@ struct TodoListView: View {
     let onToggleComplete: (Todo) -> Void
     @Binding var showSidebar: Bool
     @FocusState private var isNewTodoFocused: Bool
+    @FocusState private var isMainViewFocused: Bool
+    @State private var focusedTodoID: UUID?
+    @State private var editingTodoID: UUID?
     
     var activeTodos: [Todo] {
         todos.filter { !$0.isCompleted }.sorted { $0.createdAt > $1.createdAt }
@@ -360,7 +363,15 @@ struct TodoListView: View {
                         TodoRowView(
                             todo: todo,
                             onToggleComplete: { onToggleComplete(todo) },
-                            onDelete: { onDeleteTodo(todo) }
+                            onDelete: { onDeleteTodo(todo) },
+                            isFocused: focusedTodoID == todo.id,
+                            onFocus: { focusedTodoID = todo.id },
+                            isEditingTriggered: editingTodoID == todo.id,
+                            onEditingChange: { isEditing in
+                                if !isEditing {
+                                    editingTodoID = nil
+                                }
+                            }
                         )
                         .padding(.horizontal, 32)
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
@@ -391,7 +402,15 @@ struct TodoListView: View {
                                 TodoRowView(
                                     todo: todo,
                                     onToggleComplete: { onToggleComplete(todo) },
-                                    onDelete: { onDeleteTodo(todo) }
+                                    onDelete: { onDeleteTodo(todo) },
+                                    isFocused: focusedTodoID == todo.id,
+                                    onFocus: { focusedTodoID = todo.id },
+                                    isEditingTriggered: editingTodoID == todo.id,
+                                    onEditingChange: { isEditing in
+                                        if !isEditing {
+                                            editingTodoID = nil
+                                        }
+                                    }
                                 )
                                 .padding(.horizontal, 32)
                                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
@@ -402,6 +421,44 @@ struct TodoListView: View {
                     // Bottom padding
                     Color.clear.frame(height: 60)
                 }
+            }
+        }
+        .focusable()
+        .focused($isMainViewFocused)
+        .focusEffectDisabled() // Remove the blue focus ring
+        .onKeyPress { keyPress in
+            if keyPress.key == .upArrow {
+                moveFocusUp()
+                return .handled
+            } else if keyPress.key == .downArrow {
+                moveFocusDown()
+                return .handled
+            } else if keyPress.characters == "e" || keyPress.characters == "E" {
+                // Handle edit on focused todo
+                if let focusedID = focusedTodoID,
+                   let focusedTodo = (activeTodos + completedTodos).first(where: { $0.id == focusedID }) {
+                    startEditingTodo(focusedTodo)
+                    return .handled
+                }
+            } else if keyPress.characters == "\u{8}" || keyPress.characters == "\u{7F}" {
+                // Handle delete on focused todo
+                if let focusedID = focusedTodoID,
+                   let focusedTodo = (activeTodos + completedTodos).first(where: { $0.id == focusedID }) {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        onDeleteTodo(focusedTodo)
+                    }
+                    return .handled
+                }
+            }
+            return .ignored
+        }
+        .onTapGesture {
+            isMainViewFocused = true
+        }
+        .onAppear {
+            // Auto-focus the main view when it appears
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isMainViewFocused = true
             }
         }
         .toolbar {
@@ -448,6 +505,52 @@ struct TodoListView: View {
             newTodoTitle = ""
             isNewTodoFocused = false
         }
+    }
+    
+    private func moveFocusUp() {
+        let allTodos = activeTodos + completedTodos
+        guard !allTodos.isEmpty else { return }
+        
+        // Ensure main view is focused for keyboard navigation
+        if !isMainViewFocused {
+            isMainViewFocused = true
+        }
+        
+        if let focusedID = focusedTodoID,
+           let currentIndex = allTodos.firstIndex(where: { $0.id == focusedID }) {
+            if currentIndex > 0 {
+                focusedTodoID = allTodos[currentIndex - 1].id
+            } else {
+                focusedTodoID = allTodos.last?.id
+            }
+        } else {
+            focusedTodoID = allTodos.last?.id // Start from last when moving up
+        }
+    }
+    
+    private func moveFocusDown() {
+        let allTodos = activeTodos + completedTodos
+        guard !allTodos.isEmpty else { return }
+        
+        // Ensure main view is focused for keyboard navigation
+        if !isMainViewFocused {
+            isMainViewFocused = true
+        }
+        
+        if let focusedID = focusedTodoID,
+           let currentIndex = allTodos.firstIndex(where: { $0.id == focusedID }) {
+            if currentIndex < allTodos.count - 1 {
+                focusedTodoID = allTodos[currentIndex + 1].id
+            } else {
+                focusedTodoID = allTodos.first?.id
+            }
+        } else {
+            focusedTodoID = allTodos.first?.id // Start from first when moving down
+        }
+    }
+    
+    private func startEditingTodo(_ todo: Todo) {
+        editingTodoID = todo.id
     }
 }
 
@@ -500,11 +603,14 @@ struct TodoRowView: View {
     var todo: Todo
     let onToggleComplete: () -> Void
     let onDelete: () -> Void
+    let isFocused: Bool
+    let onFocus: () -> Void
+    let isEditingTriggered: Bool
+    let onEditingChange: (Bool) -> Void
     @State private var isEditing = false
     @State private var editingTitle = ""
     @State private var isHovered = false
     @FocusState private var isEditingFocused: Bool
-    @FocusState private var isTodoFocused: Bool
     
     var body: some View {
         HStack(spacing: 12) {
@@ -616,9 +722,12 @@ struct TodoRowView: View {
         .padding(.vertical, 12)
         .background(
             ZStack {
-                // Glass background with hover effects only
+                // Glass background with hover and focus effects
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isHovered ? Color.hoverBackground : Color.cardBackground)
+                    .fill(
+                        isFocused ? Color.accent.opacity(0.05) :
+                        (isHovered ? Color.hoverBackground : Color.cardBackground)
+                    )
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(.ultraThinMaterial)
@@ -640,27 +749,17 @@ struct TodoRowView: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .focusable()
-        .focused($isTodoFocused)
         .onTapGesture {
-            isTodoFocused = true
+            onFocus()
         }
-        .onKeyPress { keyPress in
-            if isTodoFocused && !isEditing {
-                if keyPress.characters == "e" || keyPress.characters == "E" {
-                    startEditing()
-                    return .handled
-                } else if keyPress.characters == "\u{8}" || keyPress.characters == "\u{7F}" {
-                    // \u{8} is backspace, \u{7F} is delete
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        onDelete()
-                    }
-                    return .handled
-                }
+        .onChange(of: isEditingTriggered) { triggered in
+            if triggered && !isEditing {
+                startEditing()
             }
-            return .ignored
         }
-        .focusEffectDisabled()
+        .onChange(of: isEditing) { editing in
+            onEditingChange(editing)
+        }
     }
     
     private func startEditing() {
