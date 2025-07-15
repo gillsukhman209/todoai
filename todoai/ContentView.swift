@@ -46,12 +46,12 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var todos: [Todo]
     @State private var showSidebar = true
-    @State private var showingNaturalLanguageInput = false
     @State private var showingAPIKeySetup = false
     @State private var showingSchedulingView = false
     @State private var selectedTodoForScheduling: Todo?
     @State private var taskCreationViewModel: TaskCreationViewModel?
     @State private var selectedView: TodoViewType = .inbox
+    @State private var focusInputTrigger = false
     
     init() {
         // Initialize the state as nil - will be properly set up in onAppear
@@ -148,7 +148,7 @@ struct ContentView: View {
                 onMoveTodo: moveTodoToDay,
                 onCompleteCleanup: completeCleanup,
                 showSidebar: $showSidebar,
-                showingNaturalLanguageInput: $showingNaturalLanguageInput
+                onFocusInput: focusTaskInput
             )
             .padding(.leading, showSidebar ? 280 : 0)
             .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showSidebar)
@@ -178,14 +178,21 @@ struct ContentView: View {
                 ))
             }
             
-            // Natural Language Input Overlay
-            if showingNaturalLanguageInput, let viewModel = taskCreationViewModel {
-                NaturalLanguageInputOverlay(
-                    viewModel: viewModel,
-                    isShowing: $showingNaturalLanguageInput
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                .zIndex(100)
+            // Persistent Floating Input
+            if let viewModel = taskCreationViewModel {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        FloatingTaskInputContainer(
+                            viewModel: viewModel,
+                            focusTrigger: focusInputTrigger
+                        )
+                        Spacer()
+                    }
+                    .zIndex(100)
+                }
+                .allowsHitTesting(true)
             }
             
             // API Key Setup Overlay
@@ -250,9 +257,9 @@ struct ContentView: View {
         }
         .onChange(of: taskCreationViewModel?.state) { oldValue, newValue in
             if case .completed = newValue {
-                // Hide the natural language input when task is created
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    self.showingNaturalLanguageInput = false
+                // Reset the input when task is created
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    taskCreationViewModel?.resetState()
                 }
             }
         }
@@ -266,6 +273,10 @@ struct ContentView: View {
             openAIService: openAIService,
             modelContext: modelContext
         )
+    }
+    
+    private func focusTaskInput() {
+        focusInputTrigger.toggle()
     }
     
 
@@ -542,7 +553,7 @@ struct TodoListView: View {
     let onMoveTodo: (Todo, Date) -> Void
     let onCompleteCleanup: () async -> Void
     @Binding var showSidebar: Bool
-    @Binding var showingNaturalLanguageInput: Bool
+    let onFocusInput: () -> Void
     @FocusState private var isMainViewFocused: Bool
     @State private var focusedTodoID: UUID?
     @State private var editingTodoID: UUID?
@@ -723,8 +734,8 @@ struct TodoListView: View {
                         }
                     }
                     
-                    // Bottom padding
-                    Color.clear.frame(height: 60)
+                    // Bottom padding (extra space for floating input)
+                    Color.clear.frame(height: 120)
                 }
             }
         }
@@ -771,9 +782,7 @@ struct TodoListView: View {
                 HStack(spacing: 8) {
                     // AI Smart Input Button
                     Button(action: {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            showingNaturalLanguageInput = true
-                        }
+                        onFocusInput()
                     }) {
                         Image(systemName: "brain.head.profile")
                             .font(.system(size: 14, weight: .semibold))
@@ -785,11 +794,9 @@ struct TodoListView: View {
                     .buttonStyle(.plain)
                     .keyboardShortcut(KeyEquivalent("i"), modifiers: [.command])
                     
-                    // Regular Add Button (now opens AI input)
+                    // Regular Add Button (now focuses input)
                     Button(action: {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            showingNaturalLanguageInput = true
-                        }
+                        onFocusInput()
                     }) {
                         Image(systemName: "plus")
                             .font(.system(size: 14, weight: .semibold))
@@ -882,7 +889,34 @@ struct TodoRowView: View {
     @State private var editingTitle = ""
     @State private var isHovered = false
     @State private var hasScheduledNotifications = false
+    @State private var showingInfo = false
     @FocusState private var isEditingFocused: Bool
+    
+    // Computed property to determine if task has additional information
+    private var hasAdditionalInfo: Bool {
+        return !todo.scheduleDescription.isEmpty || 
+               !todo.upcomingReminders.isEmpty || 
+               (todo.originalInput != nil && !todo.originalInput!.isEmpty && todo.originalInput != todo.title) ||
+               todo.dueDate != nil ||
+               todo.dueTime != nil ||
+               todo.isRecurring ||
+               hasScheduledNotifications
+    }
+    
+    // Date formatters
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }
+    
+    private var timeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }
     
     var body: some View {
         HStack(spacing: 12) {
@@ -955,6 +989,22 @@ struct TodoRowView: View {
                                 }
                             }
                         
+                        // Info icon
+                        if hasAdditionalInfo {
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showingInfo.toggle()
+                                }
+                            }) {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(showingInfo ? Color.accent : Color.secondaryText)
+                                    .opacity(isHovered ? 1.0 : 0.7)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Show additional information")
+                        }
+                        
                         Spacer()
                         
                         // Processing indicator
@@ -973,42 +1023,126 @@ struct TodoRowView: View {
                         }
                     }
                     
-                    // Schedule information
-                    if !todo.scheduleDescription.isEmpty {
-                        Text(todo.scheduleDescription)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(Color.tertiaryText)
-                    }
-                    
-                    // Upcoming reminders for recurring tasks
-                    if !todo.upcomingReminders.isEmpty {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Next reminders:")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(Color.accentSecondary)
-                            
-                            ForEach(Array(todo.upcomingReminders.prefix(4).enumerated()), id: \.offset) { index, reminder in
+                    // Additional information (shown when info icon is clicked)
+                    if showingInfo {
+                        VStack(alignment: .leading, spacing: 6) {
+                            // Due date and time
+                            if let dueDate = todo.dueDate {
                                 HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Color.accentSecondary.opacity(0.6))
-                                        .frame(width: 3, height: 3)
-                                    
-                                    Text(reminder)
+                                    Image(systemName: "calendar")
                                         .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(Color.accent)
+                                    
+                                    Text("Due: \(dueDate, formatter: dateFormatter)")
+                                        .font(.system(size: 10, weight: .medium))
                                         .foregroundColor(Color.tertiaryText)
                                 }
-                                .padding(.leading, 2)
+                            }
+                            
+                            if let dueTime = todo.dueTime {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "clock")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(Color.accent)
+                                    
+                                    Text("Time: \(dueTime, formatter: timeFormatter)")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(Color.tertiaryText)
+                                }
+                            }
+                            
+                            // Recurring status
+                            if todo.isRecurring {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "repeat")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(Color.accent)
+                                    
+                                    Text("Recurring task")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(Color.tertiaryText)
+                                }
+                            }
+                            
+                            // Schedule information
+                            if !todo.scheduleDescription.isEmpty {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "calendar.badge.clock")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(Color.accent)
+                                    
+                                    Text(todo.scheduleDescription)
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(Color.tertiaryText)
+                                }
+                            }
+                            
+                            // Upcoming reminders for recurring tasks
+                            if !todo.upcomingReminders.isEmpty {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "bell")
+                                            .font(.system(size: 9, weight: .medium))
+                                            .foregroundColor(Color.accent)
+                                        
+                                        Text("Next reminders:")
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundColor(Color.accentSecondary)
+                                    }
+                                    
+                                    ForEach(Array(todo.upcomingReminders.prefix(4).enumerated()), id: \.offset) { index, reminder in
+                                        HStack(spacing: 4) {
+                                            Circle()
+                                                .fill(Color.accentSecondary.opacity(0.6))
+                                                .frame(width: 3, height: 3)
+                                            
+                                            Text(reminder)
+                                                .font(.system(size: 9, weight: .medium))
+                                                .foregroundColor(Color.tertiaryText)
+                                        }
+                                        .padding(.leading, 16)
+                                    }
+                                }
+                            }
+                            
+                            // Notification status
+                            if hasScheduledNotifications {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "bell.badge")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(Color.accent)
+                                    
+                                    Text("Notifications scheduled")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(Color.tertiaryText)
+                                }
+                            }
+                            
+                            // Original AI input (if available)
+                            if let originalInput = todo.originalInput, !originalInput.isEmpty, originalInput != todo.title {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "brain.head.profile")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(Color.accent)
+                                    
+                                    Text("From: \"\(originalInput)\"")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(Color.accent.opacity(0.6))
+                                        .italic()
+                                }
                             }
                         }
-                        .padding(.top, 2)
-                    }
-                    
-                    // Original AI input (if available)
-                    if let originalInput = todo.originalInput, !originalInput.isEmpty, originalInput != todo.title {
-                        Text("From: \"\(originalInput)\"")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(Color.accent.opacity(0.6))
-                            .italic()
+                        .padding(.top, 4)
+                        .padding(.leading, 2)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    } else {
+                        // Show minimal info when collapsed
+                        if !todo.scheduleDescription.isEmpty || !todo.upcomingReminders.isEmpty {
+                            Text(todo.scheduleDescription.isEmpty ? "Has scheduled reminders" : todo.scheduleDescription)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(Color.tertiaryText)
+                                .lineLimit(1)
+                        }
                     }
                 }
             }
