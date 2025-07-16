@@ -112,6 +112,8 @@ struct ContentView: View {
     @State private var focusInputTrigger = false
     @State private var selectedDate = Date()
     
+    private let calendar = Calendar.current
+    
     init() {
         // Initialize the state as nil - will be properly set up in onAppear
         _taskCreationViewModel = State(initialValue: nil)
@@ -131,34 +133,37 @@ struct ContentView: View {
     }
     
     private var todayTodos: [Todo] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        
+        let today = Date()
         return todos.filter { todo in
-            // Include if due today
-            if let dueDate = todo.dueDate {
-                return calendar.isDate(dueDate, inSameDayAs: today)
-            }
-            
-            // Include if created today (even without due date)
-            return calendar.isDate(todo.createdAt, inSameDayAs: today)
+            return shouldTodoAppearOnDate(todo, date: today)
         }
     }
     
     private var upcomingTodos: [Todo] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
+        let today = Date()
         let nextWeek = calendar.date(byAdding: .day, value: 7, to: today)!
         
-        return todos.filter { todo in
-            // Include if has due date in the next 7 days
-            if let dueDate = todo.dueDate {
-                return dueDate >= today && dueDate < nextWeek
+        var upcomingTodos: [Todo] = []
+        
+        // Check each day in the next 7 days
+        for dayOffset in 0..<7 {
+            if let date = calendar.date(byAdding: .day, value: dayOffset, to: today) {
+                let dayTodos = todos.filter { todo in
+                    return shouldTodoAppearOnDate(todo, date: date)
+                }
+                upcomingTodos.append(contentsOf: dayTodos)
             }
-            
-            // Include if created in the next 7 days (for recurring tasks)
-            return todo.createdAt >= today && todo.createdAt < nextWeek
         }
+        
+        // Remove duplicates (same todo appearing on multiple days)
+        var uniqueTodos: [Todo] = []
+        for todo in upcomingTodos {
+            if !uniqueTodos.contains(where: { $0.id == todo.id }) {
+                uniqueTodos.append(todo)
+            }
+        }
+        
+        return uniqueTodos
     }
     
     private var groupedUpcomingTodos: [(String, Date, [Todo])] {
@@ -174,16 +179,13 @@ struct ContentView: View {
             groups.append((dateString, date, []))
         }
         
-        // Group todos by their due date or creation date
-        for todo in todos { // Use all todos, not just upcomingTodos
-            let targetDate = todo.dueDate ?? todo.createdAt
-            let daysDiff = calendar.dateComponents([.day], from: calendar.startOfDay(for: today), to: calendar.startOfDay(for: targetDate)).day ?? 0
-            
-            if daysDiff >= 0 && daysDiff < 7 {
-                if let index = groups.firstIndex(where: { Calendar.current.isDate($0.1, inSameDayAs: targetDate) }) {
-                    groups[index].2.append(todo)
-                }
+        // Group todos by their appearance on each day
+        for i in 0..<groups.count {
+            let date = groups[i].1
+            let dayTodos = todos.filter { todo in
+                return shouldTodoAppearOnDate(todo, date: date)
             }
+            groups[i].2.append(contentsOf: dayTodos)
         }
         
         // Sort todos within each day
@@ -210,7 +212,12 @@ struct ContentView: View {
                 showSidebar: $showSidebar,
                 onFocusInput: focusTaskInput,
                 onAddTaskForDay: createTaskForDay,
-                selectedDate: $selectedDate
+                selectedDate: $selectedDate,
+                todosForDate: { date in
+                    return todos.filter { todo in
+                        return shouldTodoAppearOnDate(todo, date: date)
+                    }.sorted { $0.sortOrder < $1.sortOrder }
+                }
             )
             .padding(.leading, showSidebar ? 280 : 0)
             .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showSidebar)
@@ -461,6 +468,89 @@ struct ContentView: View {
         // Save immediately - no debouncing delay
         try? modelContext.save()
     }
+    
+    // MARK: - Helper Methods for Recurring Tasks
+    
+    // Helper function to determine if a todo should appear on a specific date
+    private func shouldTodoAppearOnDate(_ todo: Todo, date: Date) -> Bool {
+        // First check if it's a regular todo with explicit due date
+        if let dueDate = todo.dueDate {
+            if calendar.isDate(dueDate, inSameDayAs: date) {
+                return true
+            }
+        }
+        
+        // Check if it's a recurring todo that should appear on this date
+        if let recurrenceConfig = todo.recurrenceConfig {
+            return shouldRecurringTodoAppearOnDate(todo, recurrenceConfig: recurrenceConfig, date: date)
+        }
+        
+        // Fallback: check if it was created on this date (for non-recurring, non-scheduled todos)
+        if todo.dueDate == nil && todo.recurrenceConfig == nil {
+            return calendar.isDate(todo.createdAt, inSameDayAs: date)
+        }
+        
+        return false
+    }
+    
+    // Helper function to check if a recurring todo should appear on a specific date
+    private func shouldRecurringTodoAppearOnDate(_ todo: Todo, recurrenceConfig: RecurrenceConfig, date: Date) -> Bool {
+        let weekday = calendar.component(.weekday, from: date)
+        
+        switch recurrenceConfig.type {
+        case .none:
+            // Non-recurring tasks
+            return false
+            
+        case .hourly:
+            // Hourly tasks appear every day
+            return true
+            
+        case .daily:
+            // Daily tasks appear every day
+            return true
+            
+        case .weekly:
+            // Weekly tasks appear on the same weekday as the original due date
+            if let dueDate = todo.dueDate {
+                let originalWeekday = calendar.component(.weekday, from: dueDate)
+                return weekday == originalWeekday
+            }
+            return false
+            
+        case .specificDays:
+            // Check if this date's weekday matches any of the specified weekdays
+            return recurrenceConfig.specificWeekdays.contains(weekday)
+            
+        case .monthly:
+            // Monthly tasks appear on the same day of the month
+            if let dueDate = todo.dueDate {
+                let originalDay = calendar.component(.day, from: dueDate)
+                let currentDay = calendar.component(.day, from: date)
+                return originalDay == currentDay
+            }
+            return false
+            
+        case .yearly:
+            // Yearly tasks appear on the same date each year
+            if let dueDate = todo.dueDate {
+                let originalMonth = calendar.component(.month, from: dueDate)
+                let originalDay = calendar.component(.day, from: dueDate)
+                let currentMonth = calendar.component(.month, from: date)
+                let currentDay = calendar.component(.day, from: date)
+                return originalMonth == currentMonth && originalDay == currentDay
+            }
+            return false
+            
+        case .customInterval:
+            // Custom interval tasks - simplified to daily for now
+            return true
+            
+        case .multipleDailyTimes:
+            // Multiple daily times - appears every day
+            return true
+        }
+    }
 }
 
 struct FloatingSidebarView: View {
@@ -699,6 +789,7 @@ struct TodoListView: View {
     let onFocusInput: () -> Void
     let onAddTaskForDay: (Date) -> Void
     @Binding var selectedDate: Date
+    let todosForDate: (Date) -> [Todo]
     @FocusState private var isMainViewFocused: Bool
     @State private var focusedTodoID: UUID?
     @State private var editingTodoID: UUID?
@@ -793,7 +884,8 @@ struct TodoListView: View {
                             onScheduleTodo: onScheduleTodo,
                             onMoveTodo: onMoveTodo,
                             onAddTaskForDay: onAddTaskForDay,
-                            selectedDate: $selectedDate
+                            selectedDate: $selectedDate,
+                            todosForDate: todosForDate
                         )
                     } else if selectedView == .upcoming {
                         // Upcoming view - grouped by day
@@ -1041,13 +1133,22 @@ struct TodoRowView: View {
             
             mainContentView
             
-            if isHovered {
-                actionButtonsView
-            }
+            Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(todoItemBackground)
+        .overlay(
+            // Action buttons overlay - appears on hover without affecting text layout
+            HStack {
+                Spacer()
+                if isHovered {
+                    actionButtonsView
+                        .padding(.trailing, 16)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
+            }
+        )
         .scaleEffect(isHovered ? 1.02 : 1.0)
         .animation(.interactiveSpring(response: 0.4, dampingFraction: 0.8, blendDuration: 0.2), value: isHovered)
         .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.9, blendDuration: 0.15), value: isFocused)
@@ -1886,6 +1987,7 @@ struct CalendarView: View {
     let onMoveTodo: (Todo, Date) -> Void
     let onAddTaskForDay: (Date) -> Void
     @Binding var selectedDate: Date
+    let todosForDate: (Date) -> [Todo]
     
     @State private var currentMonth = Date()
     @State private var selectedDayTodos: [Todo] = []
@@ -1923,13 +2025,7 @@ struct CalendarView: View {
         return weeks
     }
     
-    // Get todos for a specific date
-    private func todosForDate(_ date: Date) -> [Todo] {
-        return todos.filter { todo in
-            let todoDate = todo.dueDate ?? todo.createdAt
-            return calendar.isDate(todoDate, inSameDayAs: date)
-        }.sorted { $0.sortOrder < $1.sortOrder }
-    }
+
     
     // Check if date is in current month
     private func isInCurrentMonth(_ date: Date) -> Bool {
