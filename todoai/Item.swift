@@ -27,6 +27,9 @@ final class Todo: Identifiable, Transferable {
     var isProcessing: Bool = false // Track if OpenAI parsing is in progress
     var processingError: String? // Track any errors during background processing
     
+    // MARK: - Ordering Properties
+    var sortOrder: Int = 0 // For manual reordering
+    
     // MARK: - Computed Properties
     var isRecurring: Bool {
         return recurrenceConfig?.isRecurring ?? false
@@ -112,6 +115,7 @@ final class Todo: Identifiable, Transferable {
         self.isCompleted = false
         self.createdAt = Date()
         self.originalInput = originalInput
+        self.sortOrder = Int(Date().timeIntervalSince1970) // Use timestamp for unique ordering
     }
     
     // MARK: - Factory Methods

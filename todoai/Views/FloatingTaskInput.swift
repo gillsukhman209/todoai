@@ -26,12 +26,6 @@ struct FloatingTaskInput: View {
             
             // Main input container
             HStack(spacing: 12) {
-                // AI icon
-                Image(systemName: "brain.head.profile")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(Color.accent)
-                    .frame(width: 20)
-                
                 // Text input
                 TextField(
                     "Type a task... (e.g., 'workout every Mon, Wed, Fri at 7pm')",

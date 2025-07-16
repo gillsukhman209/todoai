@@ -31,12 +31,8 @@ struct NaturalLanguageInputView: View {
             
             Spacer()
             
-            // AI indicator
+            // Smart Detection indicator
             HStack(spacing: 8) {
-                Image(systemName: "brain.head.profile")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color.accent)
-                
                 Text("Smart Detection")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Color.secondaryText)
@@ -58,12 +54,6 @@ struct NaturalLanguageInputView: View {
     private var inputFieldSection: some View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
-                // Input icon
-                Image(systemName: "text.bubble")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(Color.accent)
-                    .frame(width: 20)
-                
                 // Text input
                 TextField(
                     "Try: 'workout every Mon, Wed, Fri at 7pm' or 'Buy groceries'",
