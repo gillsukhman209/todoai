@@ -334,9 +334,9 @@ struct ContentView: View {
         }
         .onChange(of: taskCreationViewModel?.state) { oldValue, newValue in
             if case .completed = newValue {
-                // Reset the input when task is created
+                // Clear only the input, keep the completed state briefly for user feedback
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    taskCreationViewModel?.resetState()
+                    taskCreationViewModel?.input = ""
                 }
             }
         }
@@ -2111,6 +2111,7 @@ struct NotionStyleDayView: View {
     
     @State private var isHovered = false
     @State private var isDragTargeted = false
+    @State private var showAllTasks = false
     
     private let calendar = Calendar.current
     
@@ -2146,7 +2147,9 @@ struct NotionStyleDayView: View {
             // Tasks area
             ScrollView {
                 LazyVStack(spacing: 3) {
-                    ForEach(Array(todos.prefix(4).enumerated()), id: \.element.id) { index, todo in
+                    let tasksToShow = showAllTasks ? todos : Array(todos.prefix(4))
+                    
+                    ForEach(Array(tasksToShow.enumerated()), id: \.element.id) { index, todo in
                         NotionStyleTaskView(
                             todo: todo,
                             color: Color.dynamicAccent(for: todo.hashValue),
@@ -2156,16 +2159,42 @@ struct NotionStyleDayView: View {
                         )
                     }
                     
-                    // Show overflow indicator if more than 4 tasks
-                    if todos.count > 4 {
-                        HStack {
-                            Text("+\(todos.count - 4) more")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(Color.tertiaryText)
-                            Spacer()
+                    // Show overflow indicator if more than 4 tasks and not showing all
+                    if todos.count > 4 && !showAllTasks {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showAllTasks = true
+                            }
+                        }) {
+                            HStack {
+                                Text("+\(todos.count - 4) more")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(Color.accentSecondary)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
+                        .buttonStyle(.plain)
+                    }
+                    
+                    // Show collapse button if showing all tasks
+                    if showAllTasks && todos.count > 4 {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showAllTasks = false
+                            }
+                        }) {
+                            HStack {
+                                Text("Show less")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(Color.accentSecondary)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 6)
