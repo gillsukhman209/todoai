@@ -30,6 +30,7 @@ enum TaskCreationState: Equatable {
 final class TaskCreationViewModel: ObservableObject {
     @Published var state: TaskCreationState = .idle
     @Published var input: String = ""
+    @Published var selectedDate: Date = Date()
     
     private let openAIService: OpenAIService
     private var modelContext: ModelContext
@@ -41,6 +42,11 @@ final class TaskCreationViewModel: ObservableObject {
     }
     
     // MARK: - Public Methods
+    
+    /// Update the selected date for task creation
+    func updateSelectedDate(_ date: Date) {
+        selectedDate = date
+    }
     
     /// Detect if input contains scheduling keywords
     private func containsSchedulingKeywords(_ input: String) -> Bool {
@@ -66,7 +72,7 @@ final class TaskCreationViewModel: ObservableObject {
         // Use word boundaries to avoid false positives
         // e.g., "category" shouldn't match "at" 
         for keyword in schedulingKeywords {
-            let pattern = "\\b\(NSRegularExpression.escapedPattern(for: keyword))\\b"
+            let pattern = "\\b\\(NSRegularExpression.escapedPattern(for: keyword))\\b"
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
                 let range = NSRange(location: 0, length: lowercased.count)
                 if regex.firstMatch(in: lowercased, options: [], range: range) != nil {
@@ -81,7 +87,15 @@ final class TaskCreationViewModel: ObservableObject {
     /// Create a simple todo instantly without OpenAI parsing
     private func createSimpleTodo() -> Todo {
         let cleanTitle = input.trimmingCharacters(in: .whitespaces)
-        return Todo(title: cleanTitle, originalInput: input)
+        let todo = Todo(title: cleanTitle, originalInput: input)
+        
+        // Set the due date to the selected date if it's not today
+        let calendar = Calendar.current
+        if !calendar.isDate(selectedDate, inSameDayAs: Date()) {
+            todo.dueDate = selectedDate
+        }
+        
+        return todo
     }
     
     /// Convert weekday strings to integers (1 = Sunday, 2 = Monday, etc.)
@@ -262,6 +276,12 @@ final class TaskCreationViewModel: ObservableObject {
                         todo.dueDate = date
                     } else {
                         todo.dueDate = ISO8601DateFormatter().date(from: dueDateString)
+                    }
+                } else {
+                    // If no explicit date was parsed but user is on a specific day, use the selected date
+                    let calendar = Calendar.current
+                    if !calendar.isDate(selectedDate, inSameDayAs: Date()) {
+                        todo.dueDate = selectedDate
                     }
                 }
                 

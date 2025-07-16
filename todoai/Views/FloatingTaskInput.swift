@@ -4,21 +4,21 @@ import SwiftData
 struct FloatingTaskInputContainer: View {
     @ObservedObject var viewModel: TaskCreationViewModel
     let focusTrigger: Bool
+    let selectedDate: Date
     
     var body: some View {
-        FloatingTaskInput(viewModel: viewModel, focusTrigger: focusTrigger)
+        FloatingTaskInput(viewModel: viewModel, focusTrigger: focusTrigger, selectedDate: selectedDate)
     }
 }
 
 struct FloatingTaskInput: View {
     @ObservedObject var viewModel: TaskCreationViewModel
     let focusTrigger: Bool
+    let selectedDate: Date
     @FocusState private var isInputFocused: Bool
-
     
     var body: some View {
         VStack(spacing: 8) {
-
             
             // Main input container
             HStack(spacing: 12) {
@@ -63,9 +63,15 @@ struct FloatingTaskInput: View {
         .frame(maxWidth: 600) // Limit width like ChatGPT
         .padding(.horizontal, 24)
         .padding(.bottom, 24)
-         .onChange(of: focusTrigger) { oldValue, newValue in
-             isInputFocused = true
-         }
+        .onChange(of: focusTrigger) { oldValue, newValue in
+            isInputFocused = true
+        }
+        .onChange(of: selectedDate) { oldValue, newValue in
+            viewModel.updateSelectedDate(newValue)
+        }
+        .onAppear {
+            viewModel.updateSelectedDate(selectedDate)
+        }
     }
     
     private var inputBackground: some View {
@@ -218,7 +224,7 @@ struct FloatingTaskInput: View {
     let modelContext = ModelContext(try! ModelContainer(for: Todo.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true)))
     let viewModel = TaskCreationViewModel(openAIService: openAIService, modelContext: modelContext)
     
-    FloatingTaskInput(viewModel: viewModel, focusTrigger: false)
+    FloatingTaskInput(viewModel: viewModel, focusTrigger: false, selectedDate: Date())
         .background(
             LinearGradient(
                 colors: [
