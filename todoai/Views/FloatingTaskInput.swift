@@ -84,75 +84,19 @@ struct FloatingTaskInput: View {
     }
     
     private var inputBackground: some View {
-        ZStack {
-            // Advanced liquid glass base
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.cardBackground)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .opacity(0.9)
-                )
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(.thickMaterial)
-                        .opacity(0.4)
-                )
-            
-            // Liquid glass border with glow
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(
-                    isInputFocused ? Color.accent.opacity(0.8) : Color.glassBorder,
-                    lineWidth: isInputFocused ? 2.5 : 1.5
-                )
-                .opacity(isInputFocused ? 1.0 : 0.7)
-            
-            // Inner glass highlight
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.4),
-                            Color.clear,
-                            Color.white.opacity(0.2)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-                .opacity(0.6)
-            
-            // Focus liquid effect
-            if isInputFocused {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.accent.opacity(0.1),
-                                Color.clear,
-                                Color.accentSecondary.opacity(0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .blendMode(.overlay)
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            }
-        }
-        .shadow(
-            color: Color.black.opacity(0.25),
-            radius: isInputFocused ? 25 : 15,
-            x: 0,
-            y: isInputFocused ? 12 : 6
-        )
-        .shadow(
-            color: isInputFocused ? Color.accent.opacity(0.3) : Color.clear,
-            radius: isInputFocused ? 20 : 0,
-            x: 0,
-            y: 0
-        )
+        // Clean light mode input background
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(Color.white.opacity(0.9))
+            .stroke(
+                isInputFocused ? Color.accent.opacity(0.4) : Color.black.opacity(0.1),
+                lineWidth: isInputFocused ? 2 : 1
+            )
+            .shadow(
+                color: isInputFocused ? Color.accent.opacity(0.15) : Color.black.opacity(0.08),
+                radius: isInputFocused ? 12 : 6,
+                x: 0,
+                y: isInputFocused ? 6 : 3
+            )
     }
     
     private var trailingButtonView: some View {
