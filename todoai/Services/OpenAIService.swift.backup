@@ -320,13 +320,8 @@ final class OpenAIService: ObservableObject {
         - If user says "10:36 AM", return exactly "10:36 AM"
         - If user says "remind me at 3:47 PM", return exactly "3:47 PM"
 
-        Input: "read today"
-        Output: {"cleanTitle": "read", "dueDate": "2025-07-16", "dueTime": null, "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time task to read today"}
-
         Input: "remind me in 30 minutes to take out the trash"
         Output: {"cleanTitle": "take out the trash", "dueDate": null, "dueTime": "3:00 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to take out the trash in 30 minutes"}
-        Input: "buy groceries tomorrow"
-        Output: {"cleanTitle": "buy groceries", "dueDate": "2025-07-17", "dueTime": null, "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time task to buy groceries tomorrow"}
 
         Input: "remind me in an hour to check my email"
         Output: {"cleanTitle": "check my email", "dueDate": null, "dueTime": "3:30 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to check email in 1 hour"}
@@ -400,10 +395,9 @@ final class OpenAIService: ObservableObject {
         - Clean titles should not contain time or recurrence information
         - Always include a helpful description
         - For relative time expressions, calculate the exact time based on current time
-        - Only assign dueTime when user explicitly mentions time (e.g., "at 3pm", "in 30 minutes", "this morning", "tonight")
-        - For general date-only tasks like "read today", "buy groceries tomorrow", leave dueTime as null
-        - Use reasonable defaults (morning: 9 AM, afternoon: 2 PM, evening: 7 PM, night: 8 PM) ONLY for time-specific expressions
-        - Examples: "this morning" → use 9 AM, "tonight" → use 8 PM, but "today" → leave null        - When time is ambiguous, use reasonable defaults (morning: 9 AM, afternoon: 2 PM, evening: 7 PM, night: 8 PM)
+        - For relative dates, calculate the exact date based on current date
+        - When time is ambiguous, use reasonable defaults (morning: 9 AM, afternoon: 2 PM, evening: 7 PM, night: 8 PM)
+        - NEVER return placeholder text like "[CALCULATE: ...]" - always return actual calculated values
         - For dates, use YYYY-MM-DD format (e.g., "2025-07-16")
         - For times, use 12-hour format with AM/PM (e.g., "3:30 PM")
         - PRESERVE EXACT TIMES: If user says "10:36 AM", return exactly "10:36 AM" - do not round or approximate
