@@ -25,26 +25,79 @@ enum TodoViewType: String, CaseIterable {
 
 // MARK: - Liquid Glass Design System
 extension Color {
-    // Liquid glass color palette
+    // Vibrant Rainbow Color Palette
     static let accent = Color(red: 0.4, green: 0.6, blue: 0.9) // Vibrant blue
     static let accentSecondary = Color(red: 0.3, green: 0.7, blue: 0.8) // Rich teal
+    static let accentPurple = Color(red: 0.6, green: 0.4, blue: 0.9) // Vibrant purple
+    static let accentPink = Color(red: 0.9, green: 0.4, blue: 0.7) // Vibrant pink
+    static let accentOrange = Color(red: 0.9, green: 0.6, blue: 0.2) // Vibrant orange
+    static let accentGreen = Color(red: 0.2, green: 0.8, blue: 0.4) // Vibrant green
+    static let accentYellow = Color(red: 0.9, green: 0.8, blue: 0.2) // Vibrant yellow
+    static let accentRed = Color(red: 0.9, green: 0.3, blue: 0.3) // Vibrant red
     
-    // Advanced glass morphism backgrounds
+    // Dynamic gradient colors
+    static let gradientStart = Color(red: 0.5, green: 0.2, blue: 0.8) // Deep purple
+    static let gradientMid = Color(red: 0.2, green: 0.5, blue: 0.9) // Electric blue
+    static let gradientEnd = Color(red: 0.1, green: 0.7, blue: 0.7) // Cyan
+    
+    // Status-specific colors
+    static let completedColor = Color(red: 0.2, green: 0.8, blue: 0.4) // Success green
+    static let urgentColor = Color(red: 0.9, green: 0.3, blue: 0.3) // Urgent red
+    static let warningColor = Color(red: 0.9, green: 0.7, blue: 0.2) // Warning orange
+    static let infoColor = Color(red: 0.3, green: 0.7, blue: 0.9) // Info blue
+    
+    // Enhanced glass morphism backgrounds with color tints
     static let cardBackground = Color.white.opacity(0.08)
     static let hoverBackground = Color.white.opacity(0.12)
     static let activeBackground = Color.white.opacity(0.16)
+    static let coloredCardBackground = LinearGradient(
+        colors: [
+            Color.white.opacity(0.1),
+            Color.accent.opacity(0.1),
+            Color.accentSecondary.opacity(0.08)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
     
     // Liquid glass primary background
     static let primaryBackground = Color.white.opacity(0.05)
     
-    // Glass-optimized text colors
+    // Enhanced text colors with subtle tints
     static let primaryText = Color.white
     static let secondaryText = Color.white.opacity(0.85)
     static let tertiaryText = Color.white.opacity(0.65)
+    static let accentText = Color(red: 0.7, green: 0.8, blue: 1.0) // Slightly blue-tinted text
     
-    // Glass border colors
+    // Colorful glass border colors
     static let glassBorder = Color.white.opacity(0.2)
     static let glassActiveBorder = Color.white.opacity(0.3)
+    static let coloredGlassBorder = LinearGradient(
+        colors: [
+            Color.accent.opacity(0.3),
+            Color.accentSecondary.opacity(0.2),
+            Color.accentPurple.opacity(0.1)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    // Interactive states with color variations
+    static func dynamicAccent(for index: Int) -> Color {
+        let colors = [accent, accentSecondary, accentPurple, accentPink, accentOrange, accentGreen, accentYellow]
+        let safeIndex = abs(index) % colors.count
+        return colors[safeIndex]
+    }
+    
+    static func taskStatusColor(isCompleted: Bool, isUrgent: Bool = false) -> Color {
+        if isCompleted {
+            return completedColor
+        } else if isUrgent {
+            return urgentColor
+        } else {
+            return accent
+        }
+    }
 }
 
 struct ContentView: View {
@@ -153,7 +206,8 @@ struct ContentView: View {
                 onMoveTodo: moveTodoToDay,
                 onCompleteCleanup: completeCleanup,
                 showSidebar: $showSidebar,
-                onFocusInput: focusTaskInput
+                onFocusInput: focusTaskInput,
+                onAddTaskForDay: createTaskForDay
             )
             .padding(.leading, showSidebar ? 280 : 0)
             .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showSidebar)
@@ -240,20 +294,50 @@ struct ContentView: View {
             }
         }
         .background(
-            // Dark black gradient - Sophisticated deep black spectrum
-            LinearGradient(
-                colors: [
-                    Color(red: 0.05, green: 0.05, blue: 0.05),   // Very dark gray
-                    Color(red: 0.08, green: 0.08, blue: 0.08),   // Dark gray
-                    Color(red: 0.12, green: 0.12, blue: 0.12),   // Medium dark gray
-                    Color(red: 0.15, green: 0.15, blue: 0.15),   // Lighter dark gray
-                    Color(red: 0.10, green: 0.10, blue: 0.10),   // Back to darker
-                    Color(red: 0.06, green: 0.06, blue: 0.06),   // Very dark
-                    Color(red: 0.02, green: 0.02, blue: 0.02)    // Almost black
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            // Vibrant dark gradient with subtle color hints
+            ZStack {
+                // Base dark gradient
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.05, blue: 0.08),   // Very dark with blue hint
+                        Color(red: 0.08, green: 0.06, blue: 0.10),   // Dark with purple hint
+                        Color(red: 0.06, green: 0.08, blue: 0.12),   // Medium dark with teal hint
+                        Color(red: 0.10, green: 0.08, blue: 0.15),   // Lighter dark with purple hint
+                        Color(red: 0.08, green: 0.10, blue: 0.10),   // Back to darker with teal
+                        Color(red: 0.06, green: 0.06, blue: 0.08),   // Very dark with blue
+                        Color(red: 0.02, green: 0.02, blue: 0.05)    // Almost black with hint
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                
+                // Subtle colorful overlay
+                LinearGradient(
+                    colors: [
+                        Color.gradientStart.opacity(0.05),
+                        Color.gradientMid.opacity(0.03),
+                        Color.gradientEnd.opacity(0.04),
+                        Color.accentPurple.opacity(0.02),
+                        Color.accentPink.opacity(0.01)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .blendMode(.overlay)
+                
+                // Dynamic shimmer effect
+                LinearGradient(
+                    colors: [
+                        Color.clear,
+                        Color.accent.opacity(0.02),
+                        Color.accentSecondary.opacity(0.01),
+                        Color.clear
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .blendMode(.softLight)
+            }
             .ignoresSafeArea(.all) // Extend into title bar area
         )
         .preferredColorScheme(.dark) // Ensure dark mode for proper text contrast
@@ -284,7 +368,19 @@ struct ContentView: View {
         focusInputTrigger.toggle()
     }
     
-
+    private func createTaskForDay(_ date: Date) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            // Create a new task for the specified day
+            let newTodo = Todo(title: "New Task")
+            newTodo.dueDate = date
+            
+            // Add to model context
+            modelContext.insert(newTodo)
+            
+            // Save the context
+            try? modelContext.save()
+        }
+    }
     
     private func deleteTodo(_ todo: Todo) {
         withAnimation(.easeInOut(duration: 0.25)) {
@@ -403,12 +499,13 @@ struct FloatingSidebarView: View {
             
             // Navigation items
             VStack(spacing: 8) {
-                ForEach(TodoViewType.allCases, id: \.self) { viewType in
+                ForEach(Array(TodoViewType.allCases.enumerated()), id: \.element) { index, viewType in
                     SidebarItemView(
                         icon: viewType.icon,
                         title: viewType.rawValue,
                         count: viewType == .inbox ? activeTodoCount : nil,
                         isSelected: selectedView == viewType,
+                        accentColor: Color.dynamicAccent(for: index),
                         onTap: {
                             onViewChange(viewType)
                         }
@@ -456,14 +553,14 @@ struct FloatingSidebarView: View {
         }
         .frame(width: 260)
         .background(
-            // Liquid glass sidebar - Advanced glass morphism
+            // Vibrant liquid glass sidebar - Enhanced glass morphism
             ZStack {
-                // Main gradient base
+                // Main gradient base with color hints
                 LinearGradient(
                     colors: [
-                        Color(red: 0.08, green: 0.08, blue: 0.08).opacity(0.95),   // Dark gray
-                        Color(red: 0.12, green: 0.12, blue: 0.12).opacity(0.9),   // Medium dark gray
-                        Color(red: 0.06, green: 0.06, blue: 0.06).opacity(0.95)   // Very dark gray
+                        Color(red: 0.08, green: 0.08, blue: 0.12).opacity(0.95),   // Dark with blue hint
+                        Color(red: 0.10, green: 0.08, blue: 0.15).opacity(0.9),   // Medium dark with purple hint
+                        Color(red: 0.06, green: 0.08, blue: 0.10).opacity(0.95)   // Very dark with teal hint
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -478,29 +575,45 @@ struct FloatingSidebarView: View {
                     .fill(.thickMaterial)
                     .opacity(0.2)
                 
-                // Liquid glass highlight
+                // Colorful liquid glass highlight
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.1),
-                        Color.clear,
-                        Color.white.opacity(0.05)
+                        Color.accent.opacity(0.15),
+                        Color.accentPurple.opacity(0.08),
+                        Color.accentSecondary.opacity(0.12),
+                        Color.accentPink.opacity(0.06),
+                        Color.clear
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
                 .blendMode(.overlay)
                 
-                // Accent liquid effect
+                // Enhanced accent liquid effect
                 LinearGradient(
                     colors: [
-                        Color.accent.opacity(0.15),
-                        Color.clear,
-                        Color.accentSecondary.opacity(0.1)
+                        Color.gradientStart.opacity(0.2),
+                        Color.gradientMid.opacity(0.1),
+                        Color.gradientEnd.opacity(0.15),
+                        Color.accentOrange.opacity(0.08)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
                 .blendMode(.softLight)
+                
+                // Dynamic shimmer overlay
+                LinearGradient(
+                    colors: [
+                        Color.clear,
+                        Color.accentGreen.opacity(0.05),
+                        Color.accentYellow.opacity(0.03),
+                        Color.clear
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .blendMode(.screen)
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -535,6 +648,7 @@ struct SidebarItemView: View {
     let title: String
     let count: Int?
     let isSelected: Bool
+    let accentColor: Color
     let onTap: () -> Void
     @State private var isHovered = false
     
@@ -542,7 +656,7 @@ struct SidebarItemView: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundColor(isSelected ? Color.accent : Color.secondaryText)
+                .foregroundColor(isSelected ? accentColor : Color.secondaryText)
                 .frame(width: 20)
             
             Text(title)
@@ -557,7 +671,13 @@ struct SidebarItemView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(Color.accent)
+                    .background(
+                        LinearGradient(
+                            colors: [accentColor, accentColor.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .clipShape(Capsule())
             }
         }
@@ -577,24 +697,33 @@ struct SidebarItemView: View {
                             .opacity(isSelected ? 0.6 : (isHovered ? 0.4 : 0))
                     )
                 
-                // Liquid glass border
+                // Colorful liquid glass border
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(
-                        isSelected ? Color.glassActiveBorder : 
-                        (isHovered ? Color.glassBorder : Color.clear),
-                        lineWidth: 1
+                        isSelected ? 
+                            LinearGradient(
+                                colors: [accentColor.opacity(0.6), accentColor.opacity(0.3)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ) : 
+                            LinearGradient(
+                                colors: [Color.glassBorder, Color.glassBorder],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                        lineWidth: isSelected ? 2 : 1
                     )
                     .opacity(isSelected ? 1.0 : (isHovered ? 0.8 : 0))
                 
-                // Liquid highlight for selected state
+                // Colorful liquid highlight for selected state
                 if isSelected {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.accent.opacity(0.3),
-                                    Color.accent.opacity(0.1),
-                                    Color.accentSecondary.opacity(0.1)
+                                    accentColor.opacity(0.3),
+                                    accentColor.opacity(0.1),
+                                    accentColor.opacity(0.05)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -602,6 +731,24 @@ struct SidebarItemView: View {
                         )
                         .blendMode(.overlay)
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+                
+                // Hover effect with color
+                if isHovered && !isSelected {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    accentColor.opacity(0.1),
+                                    accentColor.opacity(0.05),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .blendMode(.overlay)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }
             }
         )
@@ -630,6 +777,7 @@ struct TodoListView: View {
     let onCompleteCleanup: () async -> Void
     @Binding var showSidebar: Bool
     let onFocusInput: () -> Void
+    let onAddTaskForDay: (Date) -> Void
     @FocusState private var isMainViewFocused: Bool
     @State private var focusedTodoID: UUID?
     @State private var editingTodoID: UUID?
@@ -691,9 +839,18 @@ struct TodoListView: View {
                     }) {
                         Image(systemName: "bell.badge")
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(Color.secondaryText)
+                            .foregroundColor(Color.accentYellow)
                             .frame(width: 36, height: 36)
-                            .background(Color.white.opacity(0.1))
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        Color.accentYellow.opacity(0.2),
+                                        Color.accentYellow.opacity(0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -708,9 +865,18 @@ struct TodoListView: View {
                     }) {
                         Image(systemName: "trash.circle")
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(Color.secondaryText)
+                            .foregroundColor(Color.urgentColor)
                             .frame(width: 36, height: 36)
-                            .background(Color.white.opacity(0.1))
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        Color.urgentColor.opacity(0.2),
+                                        Color.urgentColor.opacity(0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -742,7 +908,8 @@ struct TodoListView: View {
                                     if !isEditing {
                                         editingTodoID = nil
                                     }
-                                }
+                                },
+                                onAddTaskForDay: onAddTaskForDay
                             )
                         }
                     } else {
@@ -864,7 +1031,16 @@ struct TodoListView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(width: 28, height: 28)
-                            .background(Color.accentSecondary)
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        Color.accentPurple,
+                                        Color.accentPink
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -878,7 +1054,16 @@ struct TodoListView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(width: 28, height: 28)
-                            .background(Color.accent)
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        Color.accentGreen,
+                                        Color.accentSecondary
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -1010,12 +1195,12 @@ struct TodoRowView: View {
                     
                     // Visible checkbox
                     Circle()
-                        .fill(todo.isCompleted ? Color.accent : Color.clear)
+                        .fill(todo.isCompleted ? Color.taskStatusColor(isCompleted: true) : Color.clear)
                         .frame(width: 20, height: 20)
                     
                     Circle()
                         .strokeBorder(
-                            todo.isCompleted ? Color.clear : Color.accent.opacity(0.3),
+                            todo.isCompleted ? Color.clear : Color.taskStatusColor(isCompleted: false).opacity(0.4),
                             lineWidth: 1.5
                         )
                         .frame(width: 20, height: 20)
@@ -1074,7 +1259,7 @@ struct TodoRowView: View {
                             }) {
                                 Image(systemName: "info.circle")
                                     .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(showingInfo ? Color.accent : Color.secondaryText)
+                                    .foregroundColor(showingInfo ? Color.infoColor : Color.secondaryText)
                                     .opacity(isHovered ? 1.0 : 0.7)
                             }
                             .buttonStyle(.plain)
@@ -1107,7 +1292,7 @@ struct TodoRowView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "calendar")
                                         .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accent)
+                                        .foregroundColor(Color.accentOrange)
                                     
                                     Text("Due: \(dueDate, formatter: dateFormatter)")
                                         .font(.system(size: 10, weight: .medium))
@@ -1119,7 +1304,7 @@ struct TodoRowView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "clock")
                                         .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accent)
+                                        .foregroundColor(Color.accentYellow)
                                     
                                     Text("Time: \(dueTime, formatter: timeFormatter)")
                                         .font(.system(size: 10, weight: .medium))
@@ -1132,7 +1317,7 @@ struct TodoRowView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "repeat")
                                         .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accent)
+                                        .foregroundColor(Color.accentPurple)
                                     
                                     Text("Recurring task")
                                         .font(.system(size: 10, weight: .medium))
@@ -1145,7 +1330,7 @@ struct TodoRowView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "calendar.badge.clock")
                                         .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accent)
+                                        .foregroundColor(Color.accentGreen)
                                     
                                     Text(todo.scheduleDescription)
                                         .font(.system(size: 10, weight: .medium))
@@ -1159,17 +1344,17 @@ struct TodoRowView: View {
                                     HStack(spacing: 4) {
                                         Image(systemName: "bell")
                                             .font(.system(size: 9, weight: .medium))
-                                            .foregroundColor(Color.accent)
+                                            .foregroundColor(Color.accentPink)
                                         
                                         Text("Next reminders:")
                                             .font(.system(size: 10, weight: .semibold))
-                                            .foregroundColor(Color.accentSecondary)
+                                            .foregroundColor(Color.accentPink)
                                     }
                                     
                                     ForEach(Array(todo.upcomingReminders.prefix(4).enumerated()), id: \.offset) { index, reminder in
                                         HStack(spacing: 4) {
                                             Circle()
-                                                .fill(Color.accentSecondary.opacity(0.6))
+                                                .fill(Color.accentPink.opacity(0.6))
                                                 .frame(width: 3, height: 3)
                                             
                                             Text(reminder)
@@ -1186,7 +1371,7 @@ struct TodoRowView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "bell.badge")
                                         .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accent)
+                                        .foregroundColor(Color.accentOrange)
                                     
                                     Text("Notifications scheduled")
                                         .font(.system(size: 10, weight: .medium))
@@ -1199,11 +1384,11 @@ struct TodoRowView: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: "brain.head.profile")
                                         .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accent)
+                                        .foregroundColor(Color.accentGreen)
                                     
                                     Text("From: \"\(originalInput)\"")
                                         .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(Color.accent.opacity(0.6))
+                                        .foregroundColor(Color.accentGreen.opacity(0.7))
                                         .italic()
                                 }
                             }
@@ -1234,9 +1419,18 @@ struct TodoRowView: View {
                     }) {
                         Image(systemName: hasScheduledNotifications ? "bell.badge.fill" : "bell")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(hasScheduledNotifications ? Color.accent : Color.accentSecondary)
+                            .foregroundColor(hasScheduledNotifications ? Color.accentOrange : Color.accentYellow)
                             .frame(width: 24, height: 24)
-                            .background((hasScheduledNotifications ? Color.accent : Color.accentSecondary).opacity(0.1))
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        (hasScheduledNotifications ? Color.accentOrange : Color.accentYellow).opacity(0.2),
+                                        (hasScheduledNotifications ? Color.accentOrange : Color.accentYellow).opacity(0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -1247,9 +1441,18 @@ struct TodoRowView: View {
                     }) {
                         Image(systemName: "pencil")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.accent)
+                            .foregroundColor(Color.accentPurple)
                             .frame(width: 24, height: 24)
-                            .background(Color.accent.opacity(0.1))
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        Color.accentPurple.opacity(0.2),
+                                        Color.accentPurple.opacity(0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -1262,9 +1465,18 @@ struct TodoRowView: View {
                     }) {
                         Image(systemName: "trash")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.red)
+                            .foregroundColor(Color.urgentColor)
                             .frame(width: 24, height: 24)
-                            .background(Color.red.opacity(0.1))
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        Color.urgentColor.opacity(0.2),
+                                        Color.urgentColor.opacity(0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -1276,7 +1488,7 @@ struct TodoRowView: View {
         .padding(.vertical, 12)
         .background(
             ZStack {
-                // Advanced liquid glass background
+                // Advanced colorful liquid glass background
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(
                         isFocused ? Color.activeBackground :
@@ -1293,10 +1505,38 @@ struct TodoRowView: View {
                             .opacity(0.3)
                     )
                 
-                // Liquid glass border with animated glow
+                // Colorful gradient overlay
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.dynamicAccent(for: todo.hashValue).opacity(0.05),
+                                Color.dynamicAccent(for: todo.hashValue + 1).opacity(0.03),
+                                Color.clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .blendMode(.overlay)
+                
+                // Colorful liquid glass border with animated glow
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(
-                        isFocused ? Color.glassActiveBorder : Color.glassBorder,
+                        isFocused ? 
+                            LinearGradient(
+                                colors: [
+                                    Color.dynamicAccent(for: todo.hashValue).opacity(0.6),
+                                    Color.dynamicAccent(for: todo.hashValue + 1).opacity(0.4)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ) :
+                            LinearGradient(
+                                colors: [Color.glassBorder, Color.glassBorder],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
                         lineWidth: isFocused ? 2 : 1
                     )
                     .opacity(isHovered ? 1.0 : 0.8)
@@ -1306,9 +1546,9 @@ struct TodoRowView: View {
                     .strokeBorder(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.3),
+                                Color.dynamicAccent(for: todo.hashValue).opacity(0.3),
                                 Color.clear,
-                                Color.white.opacity(0.1)
+                                Color.dynamicAccent(for: todo.hashValue + 1).opacity(0.1)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -1317,15 +1557,16 @@ struct TodoRowView: View {
                     )
                     .opacity(isHovered ? 0.8 : 0.5)
                 
-                // Liquid highlight effect
+                // Enhanced liquid highlight effect
                 if isHovered {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.accent.opacity(0.1),
-                                    Color.clear,
-                                    Color.accentSecondary.opacity(0.05)
+                                    Color.dynamicAccent(for: todo.hashValue).opacity(0.15),
+                                    Color.dynamicAccent(for: todo.hashValue + 1).opacity(0.08),
+                                    Color.dynamicAccent(for: todo.hashValue + 2).opacity(0.05),
+                                    Color.clear
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -1342,7 +1583,7 @@ struct TodoRowView: View {
                 y: isHovered ? 10 : 5
             )
             .shadow(
-                color: isFocused ? Color.accent.opacity(0.2) : Color.clear,
+                color: isFocused ? Color.dynamicAccent(for: todo.hashValue).opacity(0.3) : Color.clear,
                 radius: isFocused ? 15 : 0,
                 x: 0,
                 y: 0
@@ -1426,6 +1667,7 @@ struct DayGroupView: View {
     let onFocus: (UUID) -> Void
     let editingTodoID: UUID?
     let onEditingChange: (Bool) -> Void
+    let onAddTaskForDay: (Date) -> Void
     
     @State private var isDropTargeted = false
     
@@ -1442,15 +1684,11 @@ struct DayGroupView: View {
                 HStack(spacing: 8) {
                     // Add task button
                     Button(action: {
-                        let newTodo = Todo(title: "New task for \(dayName)")
-                        newTodo.dueDate = dayDate
-                        // Add to context and save
-                        // Note: This is a simplified implementation - in a real app you'd want to open a proper input dialog
-                        print("Add task for \(dayName) on \(dayDate)")
+                        onAddTaskForDay(dayDate)
                     }) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(Color.accent.opacity(0.7))
+                            .foregroundColor(Color.dynamicAccent(for: dayName.hashValue))
                     }
                     .buttonStyle(.plain)
                     
