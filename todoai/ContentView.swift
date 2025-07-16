@@ -2070,6 +2070,7 @@ struct CalendarView: View {
                         NotionStyleDayView(
                             date: date,
                             todos: todosForDate(date),
+                            allTodos: todos,
                             isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
                             isToday: calendar.isDate(date, inSameDayAs: Date()),
                             isInCurrentMonth: isInCurrentMonth(date),
@@ -2097,6 +2098,7 @@ struct CalendarView: View {
 struct NotionStyleDayView: View {
     let date: Date
     let todos: [Todo]
+    let allTodos: [Todo]
     let isSelected: Bool
     let isToday: Bool
     let isInCurrentMonth: Bool
@@ -2187,10 +2189,13 @@ struct NotionStyleDayView: View {
                 isHovered = hovering
             }
         }
-        .dropDestination(for: Todo.self) { droppedTodos, location in
+        .dropDestination(for: TodoReference.self) { droppedReferences, location in
             // Handle dropping todos into this day
-            for todo in droppedTodos {
-                onMoveTodo(todo, date)
+            for reference in droppedReferences {
+                // Find the actual todo from the reference ID
+                if let todo = allTodos.first(where: { $0.id == reference.id }) {
+                    onMoveTodo(todo, date)
+                }
             }
             return true
         } isTargeted: { targeted in
@@ -2298,7 +2303,7 @@ struct NotionStyleTaskView: View {
                 isHovered = hovering
             }
         }
-        .draggable(todo) {
+        .draggable(TodoReference(id: todo.id)) {
             // Drag preview
             HStack {
                 Text(todo.title)
