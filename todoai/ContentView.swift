@@ -23,6 +23,104 @@ enum TodoViewType: String, CaseIterable {
     }
 }
 
+// MARK: - Typography System
+extension Font {
+    // MARK: - Font Scales
+    static let displayLarge = Font.system(size: 32, weight: .bold, design: .default)
+    static let displayMedium = Font.system(size: 28, weight: .bold, design: .default)
+    static let displaySmall = Font.system(size: 24, weight: .semibold, design: .default)
+    
+    static let headingLarge = Font.system(size: 22, weight: .bold, design: .rounded)
+    static let headingMedium = Font.system(size: 20, weight: .semibold, design: .default)
+    static let headingSmall = Font.system(size: 18, weight: .semibold, design: .default)
+    
+    static let bodyLarge = Font.system(size: 16, weight: .medium, design: .default)
+    static let bodyMedium = Font.system(size: 15, weight: .medium, design: .default)
+    static let bodySmall = Font.system(size: 14, weight: .regular, design: .default)
+    
+    static let labelLarge = Font.system(size: 13, weight: .medium, design: .default)
+    static let labelMedium = Font.system(size: 12, weight: .medium, design: .default)
+    static let labelSmall = Font.system(size: 11, weight: .medium, design: .default)
+    
+    static let captionLarge = Font.system(size: 10, weight: .medium, design: .default)
+    static let captionSmall = Font.system(size: 9, weight: .regular, design: .default)
+}
+
+// MARK: - Spacing System
+extension CGFloat {
+    // MARK: - Spacing Scale (4pt base unit)
+    static let spacingXs: CGFloat = 4    // 4pt
+    static let spacingSm: CGFloat = 8    // 8pt
+    static let spacingMd: CGFloat = 12   // 12pt
+    static let spacingLg: CGFloat = 16   // 16pt
+    static let spacingXl: CGFloat = 20   // 20pt
+    static let spacingXxl: CGFloat = 24  // 24pt
+    static let spacingXxxl: CGFloat = 32 // 32pt
+    static let spacingHuge: CGFloat = 48 // 48pt
+    
+    // MARK: - Component Spacing
+    static let cardPadding: CGFloat = 16
+    static let cardSpacing: CGFloat = 12
+    static let sectionSpacing: CGFloat = 24
+    static let headerSpacing: CGFloat = 32
+    
+    // MARK: - Density Controls
+    static let compactCardPadding: CGFloat = 12
+    static let compactCardSpacing: CGFloat = 8
+    static let compactSectionSpacing: CGFloat = 16
+    
+    static let comfortableCardPadding: CGFloat = 20
+    static let comfortableCardSpacing: CGFloat = 16
+    static let comfortableSectionSpacing: CGFloat = 32
+}
+
+// MARK: - Layout Density
+enum LayoutDensity {
+    case compact
+    case comfortable
+    case spacious
+    
+    var cardPadding: CGFloat {
+        switch self {
+        case .compact: return .compactCardPadding
+        case .comfortable: return .cardPadding
+        case .spacious: return .comfortableCardPadding
+        }
+    }
+    
+    var cardSpacing: CGFloat {
+        switch self {
+        case .compact: return .compactCardSpacing
+        case .comfortable: return .cardSpacing
+        case .spacious: return .comfortableCardSpacing
+        }
+    }
+    
+    var sectionSpacing: CGFloat {
+        switch self {
+        case .compact: return .compactSectionSpacing
+        case .comfortable: return .sectionSpacing
+        case .spacious: return .comfortableSectionSpacing
+        }
+    }
+    
+    var emptyStateHeight: CGFloat {
+        switch self {
+        case .compact: return 60
+        case .comfortable: return 80
+        case .spacious: return 100
+        }
+    }
+    
+    var calendarDayHeight: CGFloat {
+        switch self {
+        case .compact: return 100
+        case .comfortable: return 120
+        case .spacious: return 140
+        }
+    }
+}
+
 // MARK: - Liquid Glass Design System
 extension Color {
     // Vibrant Rainbow Color Palette
@@ -566,11 +664,11 @@ struct FloatingSidebarView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("TodoAI")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.headingLarge)
                         .foregroundColor(Color.primaryText)
                     
                     Text("Task Management")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.labelLarge)
                         .foregroundColor(Color.secondaryText)
                 }
                 
@@ -664,12 +762,12 @@ struct SidebarItemView: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .medium))
+                .font(.bodyLarge)
                 .foregroundColor(isSelected ? accentColor : Color.secondaryText)
                 .frame(width: 20)
             
             Text(title)
-                .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
+                .font(isSelected ? .bodyMedium : .bodySmall)
                 .foregroundColor(isSelected ? Color.primaryText : Color.secondaryText)
             
             Spacer()
@@ -824,18 +922,18 @@ struct TodoListView: View {
                         .buttonStyle(.plain)
                     }
                     
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: .spacingXs) {
                         Text(selectedView.rawValue)
-                            .font(.system(size: 28, weight: .bold, design: .default))
+                            .font(.displayMedium)
                             .foregroundColor(Color.primaryText)
                         
                         if !activeTodos.isEmpty {
                             Text("\(activeTodos.count) task\(activeTodos.count == 1 ? "" : "s")")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.bodySmall)
                                 .foregroundColor(Color.secondaryText)
                         } else {
                             Text(selectedView == .today ? "No tasks for today" : "All caught up")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.bodySmall)
                                 .foregroundColor(Color.secondaryText)
                         }
                     }
@@ -1098,19 +1196,7 @@ struct TodoRowView: View {
     @State private var editingTitle = ""
     @State private var isHovered = false
     @State private var hasScheduledNotifications = false
-    @State private var showingInfo = false
     @FocusState private var isEditingFocused: Bool
-    
-    // Computed property to determine if task has additional information
-    private var hasAdditionalInfo: Bool {
-        return !todo.scheduleDescription.isEmpty || 
-               !todo.upcomingReminders.isEmpty || 
-               (todo.originalInput != nil && !todo.originalInput!.isEmpty && todo.originalInput != todo.title) ||
-               todo.dueDate != nil ||
-               todo.dueTime != nil ||
-               todo.isRecurring ||
-               hasScheduledNotifications
-    }
     
     // Date formatters
     private var dateFormatter: DateFormatter {
@@ -1128,15 +1214,15 @@ struct TodoRowView: View {
     }
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: .spacingMd) {
             checkboxView
             
             mainContentView
             
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, .cardPadding)
+        .padding(.vertical, .spacingMd)
         .background(todoItemBackground)
         .overlay(
             // Action buttons overlay - appears on hover without affecting text layout
@@ -1219,15 +1305,13 @@ struct TodoRowView: View {
                 titleView
             }
             
-            if showingInfo && hasAdditionalInfo {
-                additionalInfoView
-            }
+
         }
     }
     
     private var editingView: some View {
         TextField("Task title", text: $editingTitle)
-            .font(.system(size: 15, weight: .medium))
+            .font(.bodyMedium)
             .foregroundColor(Color.primaryText)
             .focused($isEditingFocused)
             .onSubmit {
@@ -1242,12 +1326,14 @@ struct TodoRowView: View {
     }
     
     private var titleView: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: .spacingXs) {
+            HStack(spacing: .spacingSm) {
                 Text(todo.title)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.bodyMedium)
                     .foregroundColor(todo.isCompleted ? Color.tertiaryText : Color.primaryText)
                     .strikethrough(todo.isCompleted, color: Color.tertiaryText)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
                     .onTapGesture(count: 2) {
                         startEditing()
                     }
@@ -1261,10 +1347,7 @@ struct TodoRowView: View {
                         }
                     }
                 
-                // Info icon
-                if hasAdditionalInfo {
-                    infoButtonView
-                }
+
                 
                 Spacer()
                 
@@ -1291,87 +1374,40 @@ struct TodoRowView: View {
         }
     }
     
-    private var infoButtonView: some View {
-        Button(action: {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                showingInfo.toggle()
-            }
-        }) {
-            Image(systemName: "info.circle")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(Color.secondaryText)
-        }
-        .buttonStyle(.plain)
-    }
+
     
     private func dueDateView(_ dueDate: Date) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: .spacingXs) {
             Image(systemName: "calendar")
-                .font(.system(size: 10, weight: .medium))
+                .font(.captionLarge)
                 .foregroundColor(Color.tertiaryText)
             
             Text(dateFormatter.string(from: dueDate))
-                .font(.system(size: 12, weight: .medium))
+                .font(.labelMedium)
                 .foregroundColor(Color.tertiaryText)
             
             if let dueTime = todo.dueTime {
                 Text("•")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.captionLarge)
                     .foregroundColor(Color.tertiaryText)
                 
                 Text(timeFormatter.string(from: dueTime))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.labelMedium)
                     .foregroundColor(Color.tertiaryText)
             }
         }
     }
     
-    private var additionalInfoView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let originalInput = todo.originalInput, !originalInput.isEmpty && originalInput != todo.title {
-                HStack {
-                    Text("Original:")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Color.tertiaryText)
-                    
-                    Text(originalInput)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(Color.tertiaryText)
-                        .italic()
-                }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 8)
-                .background(Color.tertiaryText.opacity(0.1))
-                .cornerRadius(8)
-            }
-            
-            if !todo.scheduleDescription.isEmpty {
-                HStack {
-                    Text("Schedule:")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Color.tertiaryText)
-                    
-                    Text(todo.scheduleDescription)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(Color.tertiaryText)
-                }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 8)
-                .background(Color.tertiaryText.opacity(0.1))
-                .cornerRadius(8)
-            }
-        }
-        .padding(.top, 8)
-    }
+
     
     private var actionButtonsView: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: .spacingXs + 2) {
             // Schedule button
             Button(action: {
                 onSchedule()
             }) {
                 Image(systemName: hasScheduledNotifications ? "bell.badge.fill" : "bell")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.labelMedium)
                     .foregroundColor(hasScheduledNotifications ? Color.accentOrange : Color.accentYellow)
                     .frame(width: 24, height: 24)
                     .background(
@@ -1393,7 +1429,7 @@ struct TodoRowView: View {
                 startEditing()
             }) {
                 Image(systemName: "pencil")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.labelMedium)
                     .foregroundColor(Color.accentPurple)
                     .frame(width: 24, height: 24)
                     .background(
@@ -1417,7 +1453,7 @@ struct TodoRowView: View {
                 }
             }) {
                 Image(systemName: "trash")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.labelMedium)
                     .foregroundColor(Color.urgentColor)
                     .frame(width: 24, height: 24)
                     .background(
@@ -1733,55 +1769,55 @@ struct DayGroupView: View {
             // Day Header
             HStack {
                 Text(dayName)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.bodyLarge)
                     .foregroundColor(Color.secondaryText)
                 
                 Spacer()
                 
-                HStack(spacing: 8) {
+                HStack(spacing: .spacingSm) {
                     // Add task button
                     Button(action: {
                         onAddTaskForDay(dayDate)
                     }) {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.bodySmall)
                             .foregroundColor(Color.dynamicAccent(for: dayName.hashValue))
                     }
                     .buttonStyle(.plain)
                     
                     // Task count
                     Text("\(dayTodos.count)")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.labelMedium)
                         .foregroundColor(Color.tertiaryText)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, .spacingXs + 2)
+                        .padding(.vertical, .spacingXs / 2)
                         .background(Color.tertiaryText.opacity(0.1))
                         .clipShape(Capsule())
                 }
             }
-            .padding(.horizontal, 32)
-            .padding(.top, isFirst ? 0 : 24)
+            .padding(.horizontal, .headerSpacing)
+            .padding(.top, isFirst ? 0 : .sectionSpacing)
             
             // Tasks Section - Entire area is a drop zone
             VStack(spacing: 8) {
                 if dayTodos.isEmpty {
                     // Empty state
-                    VStack(spacing: 12) {
+                    VStack(spacing: .spacingMd) {
                         Image(systemName: "calendar.badge.plus")
-                            .font(.system(size: 24, weight: .medium))
+                            .font(.displaySmall)
                             .foregroundColor(isDayDropTargeted ? Color.accent : Color.tertiaryText)
                         
                         Text(isDayDropTargeted ? "Drop here" : "No tasks yet")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.bodySmall)
                             .foregroundColor(isDayDropTargeted ? Color.accent : Color.tertiaryText)
                         
                         if !isDayDropTargeted {
                             Text("Drag tasks here")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.labelMedium)
                                 .foregroundColor(Color.tertiaryText.opacity(0.7))
                         }
                     }
-                    .frame(minHeight: 80)
+                    .frame(minHeight: LayoutDensity.comfortable.emptyStateHeight)
                     .frame(maxWidth: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
@@ -1791,19 +1827,19 @@ struct DayGroupView: View {
                                 style: StrokeStyle(lineWidth: 2, dash: [8, 4])
                             )
                     )
-                    .padding(.horizontal, 32)
-                    .animation(.easeOut(duration: 0.1), value: isDayDropTargeted)
+                                            .padding(.horizontal, .headerSpacing)
+                        .animation(.easeOut(duration: 0.1), value: isDayDropTargeted)
                 } else {
                     // Tasks layout
-                    VStack(spacing: 12) {
+                    VStack(spacing: .cardSpacing) {
                         if dayTodos.count > 5 {
                             professionalMultiColumnLayout
                         } else {
                             singleColumnLayout
                         }
                     }
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, .headerSpacing)
+                    .padding(.vertical, .spacingMd)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
                             .fill(isDayDropTargeted ? Color.accent.opacity(0.08) : Color.clear)
@@ -1853,11 +1889,11 @@ struct DayGroupView: View {
     }
     
     private var professionalMultiColumnLayout: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: .spacingLg) {
             // Professional multi-column grid with real-time reordering
-            let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 2)
+            let columns = Array(repeating: GridItem(.flexible(), spacing: .spacingLg), count: 2)
             
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: .cardSpacing) {
                 ForEach(Array(dayTodos.enumerated()), id: \.element.id) { indexAndTodo in
                     let index = indexAndTodo.offset
                     let todo = indexAndTodo.element
@@ -2216,7 +2252,7 @@ struct NotionStyleDayView: View {
             // Day number header
             HStack {
                 Text("\(calendar.component(.day, from: date))")
-                    .font(.system(size: 14, weight: isToday ? .bold : .medium))
+                    .font(isToday ? .bodySmall : .labelLarge)
                     .foregroundColor(dayNumberColor)
                     .opacity(isInCurrentMonth ? 1.0 : 0.3)
                 
@@ -2226,7 +2262,7 @@ struct NotionStyleDayView: View {
                 if isHovered && isInCurrentMonth {
                     Button(action: onAddTask) {
                         Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.captionLarge)
                             .foregroundColor(.white)
                             .frame(width: 16, height: 16)
                             .background(Color.accentGreen)
@@ -2236,13 +2272,13 @@ struct NotionStyleDayView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.horizontal, .spacingSm)
+            .padding(.top, .spacingSm)
+            .padding(.bottom, .spacingXs)
             
             // Tasks area
             ScrollView {
-                LazyVStack(spacing: 3) {
+                LazyVStack(spacing: .spacingXs) {
                     let tasksToShow = showAllTasks ? todos : Array(todos.prefix(4))
                     
                     ForEach(Array(tasksToShow.enumerated()), id: \.element.id) { index, todo in
@@ -2264,12 +2300,12 @@ struct NotionStyleDayView: View {
                         }) {
                             HStack {
                                 Text("+\(todos.count - 4) more")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(.captionLarge)
                                     .foregroundColor(Color.accentSecondary)
                                 Spacer()
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, .spacingSm)
+                            .padding(.vertical, .spacingXs / 2)
                         }
                         .buttonStyle(.plain)
                     }
@@ -2283,23 +2319,23 @@ struct NotionStyleDayView: View {
                         }) {
                             HStack {
                                 Text("Show less")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(.captionLarge)
                                     .foregroundColor(Color.accentSecondary)
                                 Spacer()
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, .spacingSm)
+                            .padding(.vertical, .spacingXs / 2)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 6)
+                .padding(.horizontal, .spacingXs + 2)
             }
             .frame(maxHeight: .infinity)
             
             Spacer()
         }
-        .frame(height: 140) // Much taller like Notion
+        .frame(height: LayoutDensity.comfortable.calendarDayHeight)
         .frame(maxWidth: .infinity)
         .background(dayBackground)
         .overlay(dayBorder)
@@ -2392,10 +2428,10 @@ struct NotionStyleTaskView: View {
     @State private var isHovered = false
     
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: .spacingXs + 2) {
             // Task text
             Text(todo.title)
-                .font(.system(size: 11, weight: .medium))
+                .font(.labelSmall)
                 .foregroundColor(todo.isCompleted ? Color.secondaryText : Color.primaryText)
                 .strikethrough(todo.isCompleted)
                 .lineLimit(2)
@@ -2407,14 +2443,14 @@ struct NotionStyleTaskView: View {
             if isHovered {
                 Button(action: onToggleComplete) {
                     Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 12))
+                        .font(.labelMedium)
                         .foregroundColor(todo.isCompleted ? Color.completedColor : Color.secondaryText)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, .spacingSm)
+        .padding(.vertical, .spacingXs)
         .background(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .fill(color.opacity(todo.isCompleted ? 0.1 : 0.15))
