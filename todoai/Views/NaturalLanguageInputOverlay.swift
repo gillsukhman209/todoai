@@ -52,11 +52,6 @@ struct NaturalLanguageInputOverlay: View {
                     NaturalLanguageInputView(viewModel: viewModel)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 24)
-                    
-                    // Example prompts
-                    ExamplePromptsView()
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 24)
                 }
                 .background(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -85,78 +80,7 @@ struct NaturalLanguageInputOverlay: View {
     }
 }
 
-// MARK: - Example Prompts
-struct ExamplePromptsView: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Try these examples (automatic smart detection):")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(Color.secondaryText)
-            
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 8) {
-                ExamplePromptCard(
-                    icon: "phone",
-                    text: "call dad at 6am",
-                    color: .blue
-                )
-                
-                ExamplePromptCard(
-                    icon: "creditcard",
-                    text: "pay PGE every Friday at 10am",
-                    color: .green
-                )
-                
-                ExamplePromptCard(
-                    icon: "figure.strengthtraining.traditional",
-                    text: "workout every Mon, Wed, Fri at 7pm",
-                    color: .orange
-                )
-                
-                ExamplePromptCard(
-                    icon: "drop.fill",
-                    text: "drink water every 30 minutes from 9am to 5pm",
-                    color: .cyan
-                )
-            }
-        }
-    }
-}
 
-struct ExamplePromptCard: View {
-    let icon: String
-    let text: String
-    let color: Color
-    
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(color)
-                .frame(width: 16)
-            
-            Text(text)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(Color.secondaryText)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-            
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
-                )
-        )
-    }
-}
 
 // MARK: - Preview
 #Preview {

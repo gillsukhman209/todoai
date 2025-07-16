@@ -9,6 +9,10 @@ import SwiftUI
 import SwiftData
 import AppKit
 
+extension Notification.Name {
+    static let focusTaskInput = Notification.Name("focusTaskInput")
+}
+
 @main
 struct todoaiApp: App {
     @StateObject private var notificationDelegate = NotificationDelegate.shared
@@ -77,5 +81,13 @@ struct todoaiApp: App {
         .modelContainer(sharedModelContainer)
         .defaultSize(width: 800, height: 600)
         .windowToolbarStyle(.unified(showsTitle: true))
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Task") {
+                    NotificationCenter.default.post(name: .focusTaskInput, object: nil)
+                }
+                .keyboardShortcut("n", modifiers: .command)
+            }
+        }
     }
 }
