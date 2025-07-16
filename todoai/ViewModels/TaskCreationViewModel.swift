@@ -555,7 +555,7 @@ final class TaskCreationViewModel: ObservableObject {
         case .creating:
             return "Creating todo..."
         case .completed:
-            return "Todo created successfully!"
+            return ""
         case .error(let message):
             return message
         }
