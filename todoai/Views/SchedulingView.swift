@@ -49,8 +49,6 @@ struct SchedulingView: View {
     
     @State private var selectedDate = Date()
     @State private var selectedTime = Date()
-    @State private var selectedPriority: TaskPriority = .medium
-    @State private var selectedType: TaskType = .reminder
     @State private var recurrencePattern: RecurrencePattern = .once
     @State private var showRecurrenceOptions = false
     @State private var isScheduling = false
@@ -63,163 +61,26 @@ struct SchedulingView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header with close button
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Schedule Reminder")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(Color.primaryText)
-                    
-                    Text(todo.title)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color.secondaryText)
-                        .lineLimit(2)
-                }
-                
-                Spacer()
-                
-                Button(action: {
-                    onScheduled() // This will dismiss the view
-                }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Color.secondaryText)
-                        .frame(width: 28, height: 28)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 20)
+            // Professional Header
+            headerView
             
             // Content
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 20) {
                     // Permission warning if needed
                     permissionView
                     
                     // Error message if any
                     if let errorMessage = errorMessage {
-                        HStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.red)
-                            Text(errorMessage)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.red)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.red.opacity(0.1))
-                        )
+                        errorMessageView
                     }
                     
                     // Date & Time Section
-                    sectionCard("Date & Time", systemImage: "calendar") {
-                        VStack(spacing: 16) {
-                            HStack {
-                                Label("Date", systemImage: "calendar")
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundColor(Color.primaryText)
-                                
-                                Spacer()
-                                
-                                DatePicker("", selection: $selectedDate, displayedComponents: .date)
-                                    .labelsHidden()
-                                    .datePickerStyle(CompactDatePickerStyle())
-                            }
-                            
-                            HStack {
-                                Label("Time", systemImage: "clock")
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundColor(Color.primaryText)
-                                
-                                Spacer()
-                                
-                                DatePicker("", selection: $selectedTime, displayedComponents: .hourAndMinute)
-                                    .labelsHidden()
-                                    .datePickerStyle(CompactDatePickerStyle())
-                            }
-                            
-                            // Optional recurrence toggle
-                            VStack(spacing: 12) {
-                                HStack {
-                                    Label("Repeat", systemImage: "repeat")
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundColor(Color.primaryText)
-                                    
-                                    Spacer()
-                                    
-                                    Toggle("", isOn: $showRecurrenceOptions)
-                                        .labelsHidden()
-                                        .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
-                                }
-                                
-                                if showRecurrenceOptions {
-                                    HStack {
-                                        Text("Recurrence")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(Color.secondaryText)
-                                        
-                                        Spacer()
-                                        
-                                        Picker("Recurrence", selection: $recurrencePattern) {
-                                            ForEach(RecurrencePattern.allCases.filter { $0 != .once }, id: \.self) { pattern in
-                                                Text(pattern.displayName).tag(pattern)
-                                            }
-                                        }
-                                        .pickerStyle(MenuPickerStyle())
-                                        .frame(maxWidth: 120)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Priority Section
-                    sectionCard("Priority", systemImage: "flag") {
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
-                            ForEach(TaskPriority.allCases, id: \.self) { priority in
-                                priorityButton(priority)
-                            }
-                        }
-                    }
-                    
-                    // Type Section
-                    sectionCard("Type", systemImage: "tag") {
-                        Picker("Task Type", selection: $selectedType) {
-                            ForEach(TaskType.allCases, id: \.self) { type in
-                                HStack {
-                                    Image(systemName: type.systemImage)
-                                        .foregroundColor(Color.accentColor)
-                                    Text(type.displayName)
-                                        .foregroundColor(Color.primaryText)
-                                }
-                                .tag(type)
-                            }
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    dateTimeSection
                     
                     // Success message
                     if scheduleSuccess {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Reminder scheduled successfully!")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.green)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.green.opacity(0.1))
-                        )
+                        successMessageView
                     }
                 }
                 .padding(.horizontal, 24)
@@ -227,50 +88,14 @@ struct SchedulingView: View {
             }
             
             // Bottom action button
-            VStack(spacing: 16) {
-                Button(action: scheduleReminder) {
-                    HStack {
-                        if isScheduling {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "bell.badge.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                        }
-                        
-                        Text(isScheduling ? "Scheduling..." : "Schedule Reminder")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.accentColor)
-                    )
-                    .foregroundColor(.white)
-                }
-                .disabled(isScheduling || notificationService.permissionStatus == .denied)
-                .scaleEffect(isScheduling ? 0.98 : 1.0)
-                .animation(.easeInOut(duration: 0.1), value: isScheduling)
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
+            scheduleButton
         }
-        .frame(maxWidth: 500, maxHeight: 600)
+        .frame(maxWidth: 480, maxHeight: 500)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.primaryBackground)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
-                )
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
         )
-        .shadow(color: Color.black.opacity(0.5), radius: 30, x: 0, y: 15)
         .alert("Notification Permission Required", isPresented: $showingPermissionAlert) {
             Button("Settings") {
                 openNotificationSettings()
@@ -291,144 +116,295 @@ struct SchedulingView: View {
         }
     }
     
-    // MARK: - Helper Views
-    
-    @ViewBuilder
-    private func sectionCard<Content: View>(_ title: String, systemImage: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(Color.accentColor)
+    // MARK: - Header View
+    private var headerView: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Schedule Reminder")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(Color.black)
                 
-                Text(title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(Color.primaryText)
+                Text(todo.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(Color.gray)
+                    .lineLimit(2)
             }
             
-            content()
+            Spacer()
+            
+            Button(action: {
+                onScheduled()
+            }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color.gray)
+                    .frame(width: 32, height: 32)
+                    .background(Color.gray.opacity(0.1))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
         }
-        .padding(20)
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
+        .padding(.bottom, 16)
+    }
+    
+    // MARK: - Date & Time Section
+    private var dateTimeSection: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 16) {
+                // Date Selection
+                HStack {
+                    Label("Date", systemImage: "calendar")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(Color.black)
+                    
+                    Spacer()
+                    
+                    DatePicker("", selection: $selectedDate, displayedComponents: .date)
+                        .labelsHidden()
+                        .datePickerStyle(CompactDatePickerStyle())
+                }
+                
+                Divider()
+                
+                // Time Selection
+                HStack {
+                    Label("Time", systemImage: "clock")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(Color.black)
+                    
+                    Spacer()
+                    
+                    DatePicker("", selection: $selectedTime, displayedComponents: .hourAndMinute)
+                        .labelsHidden()
+                        .datePickerStyle(CompactDatePickerStyle())
+                }
+                
+                Divider()
+                
+                // Repeat Toggle
+                HStack {
+                    Label("Repeat", systemImage: "repeat")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(Color.black)
+                    
+                    Spacer()
+                    
+                    Toggle("", isOn: $showRecurrenceOptions)
+                        .labelsHidden()
+                        .toggleStyle(SwitchToggleStyle(tint: Color.blue))
+                }
+                
+                // Recurrence Options
+                if showRecurrenceOptions {
+                    HStack {
+                        Text("Frequency")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Color.gray)
+                        
+                        Spacer()
+                        
+                        Picker("Recurrence", selection: $recurrencePattern) {
+                            ForEach(RecurrencePattern.allCases.filter { $0 != .once }, id: \.self) { pattern in
+                                Text(pattern.displayName).tag(pattern)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .frame(maxWidth: 120)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 20)
+        }
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
-                )
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.gray.opacity(0.05))
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
     }
     
+    // MARK: - Permission View
     @ViewBuilder
     private var permissionView: some View {
         if notificationService.permissionStatus == .denied {
             VStack(spacing: 12) {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                    Text("Notification Permission Required")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.orange)
-                }
+                Image(systemName: "bell.slash.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.orange)
                 
-                Text("Please enable notifications in System Preferences to receive reminders.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Color.secondaryText)
+                Text("Notifications Disabled")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.black)
+                
+                Text("Enable notifications in System Preferences to schedule reminders")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
                     .multilineTextAlignment(.center)
                 
                 Button("Open Settings") {
                     openNotificationSettings()
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.blue)
             }
-            .padding(16)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 20)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color.orange.opacity(0.1))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(Color.orange.opacity(0.3), lineWidth: 1)
-                    )
+                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
             )
-        }
-    }
-    
-    private func priorityButton(_ priority: TaskPriority) -> some View {
-        Button(action: {
-            selectedPriority = priority
-        }) {
-            VStack(spacing: 6) {
-                Image(systemName: "flag.fill")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(priority.color)
+        } else if notificationService.permissionStatus == .notRequested {
+            VStack(spacing: 12) {
+                Image(systemName: "bell.badge.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.blue)
                 
-                Text(priority.displayName)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(selectedPriority == priority ? Color.primaryText : Color.secondaryText)
+                Text("Permission Required")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.black)
+                
+                Text("We need permission to send you reminder notifications")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                
+                Button("Grant Permission") {
+                    requestNotificationPermission()
+                }
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.blue)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 20)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(selectedPriority == priority ? priority.color.opacity(0.15) : Color.clear)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(selectedPriority == priority ? priority.color : Color.white.opacity(0.2), lineWidth: 1)
-                    )
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.blue.opacity(0.1))
+                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
-        .scaleEffect(selectedPriority == priority ? 1.02 : 1.0)
-        .animation(.easeInOut(duration: 0.1), value: selectedPriority == priority)
     }
     
-    // MARK: - Actions
+    // MARK: - Error Message View
+    private var errorMessageView: some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.red)
+            Text(errorMessage ?? "")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.red)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.red.opacity(0.1))
+                .stroke(Color.red.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Success Message View
+    private var successMessageView: some View {
+        HStack {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+            Text("Reminder scheduled successfully!")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.green)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.green.opacity(0.1))
+                .stroke(Color.green.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Schedule Button
+    private var scheduleButton: some View {
+        VStack(spacing: 16) {
+            Button(action: scheduleReminder) {
+                HStack {
+                    if isScheduling {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    
+                    Text(isScheduling ? "Scheduling..." : "Schedule Reminder")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(notificationService.permissionStatus == .denied ? Color.gray : Color.blue)
+                )
+                .foregroundColor(.white)
+            }
+            .disabled(isScheduling || notificationService.permissionStatus == .denied)
+            .scaleEffect(isScheduling ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: isScheduling)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+    }
+    
+    // MARK: - Helper Methods
+    private func checkNotificationPermission() {
+        Task {
+            await notificationService.checkPermissionStatus()
+        }
+    }
+    
+    private func requestNotificationPermission() {
+        Task {
+            await notificationService.requestPermission()
+        }
+    }
+    
+    private func openNotificationSettings() {
+        if let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+            NSWorkspace.shared.open(settingsURL)
+        }
+    }
     
     private func scheduleReminder() {
-        // Prevent multiple rapid clicks
-        guard !isScheduling else { return }
+        guard notificationService.permissionStatus == .authorized else {
+            showingPermissionAlert = true
+            return
+        }
         
-        // Clear previous error message
-        errorMessage = nil
         isScheduling = true
+        errorMessage = nil
         
         Task {
             do {
-                // Check permissions first
-                if notificationService.permissionStatus != .authorized {
-                    await requestPermission()
-                    if notificationService.permissionStatus != .authorized {
-                        await MainActor.run {
-                            self.isScheduling = false
-                            self.showingPermissionAlert = true
-                        }
-                        return
-                    }
+                // Create date with selected time
+                let calendar = Calendar.current
+                let dateComponents = calendar.dateComponents([.year, .month, .day], from: selectedDate)
+                let timeComponents = calendar.dateComponents([.hour, .minute], from: selectedTime)
+                
+                guard let scheduledDate = calendar.date(bySettingHour: timeComponents.hour ?? 0,
+                                                     minute: timeComponents.minute ?? 0,
+                                                     second: 0,
+                                                     of: calendar.date(from: dateComponents) ?? selectedDate) else {
+                    throw NSError(domain: "SchedulingError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid date"])
                 }
                 
-                // Create schedule with proper date validation
-                let scheduledDate = createScheduledDate()
+                // Update todo with scheduling information
+                todo.dueDate = scheduledDate
+                todo.dueTime = selectedTime
                 
-                // Validate the date is sufficiently in the future
-                let now = Date()
-                if scheduledDate <= now {
-                    await MainActor.run {
-                        self.isScheduling = false
-                        self.errorMessage = "Please select a future date and time"
-                    }
-                    return
-                } else if scheduledDate <= now.addingTimeInterval(30) {
-                    await MainActor.run {
-                        self.isScheduling = false
-                        self.errorMessage = "Please select a time at least 30 seconds in the future"
-                    }
-                    return
-                }
-                
-                let recurrenceType = showRecurrenceOptions ? recurrencePattern.toEnhancedRecurrenceType : .once
+                // Create enhanced schedule for TaskScheduler
                 let schedule = EnhancedSchedule(
-                    type: recurrenceType,
+                    type: showRecurrenceOptions ? recurrencePattern.toEnhancedRecurrenceType : .once,
                     interval: 1,
                     startDate: scheduledDate,
                     endDate: nil,
@@ -437,112 +413,68 @@ struct SchedulingView: View {
                 
                 // Set up time range
                 let timeRange = EnhancedTimeRange(
-                    startTime: scheduledDate,
-                    endTime: scheduledDate.addingTimeInterval(3600), // 1 hour duration
+                    startTime: selectedTime,
+                    endTime: selectedTime.addingTimeInterval(3600), // 1 hour duration
                     timezone: TimeZone.current.identifier
                 )
                 schedule.timeRange = timeRange
                 
-                // Convert Todo to EnhancedTask and schedule
+                // Create recurrence config for Todo model if needed
+                if showRecurrenceOptions {
+                    let recurrenceConfig = RecurrenceConfig(
+                        type: RecurrenceType.daily, // Simplified for now
+                        interval: 1,
+                        specificWeekdays: [],
+                        specificTimes: [],
+                        timeRange: nil,
+                        monthlyDay: nil,
+                        endDate: nil
+                    )
+                    todo.recurrenceConfig = recurrenceConfig
+                }
+                
+                // Schedule the notification using TaskScheduler
                 let result = await taskScheduler.convertAndScheduleTask(todo, withSchedule: schedule)
                 
-                await MainActor.run {
-                    self.isScheduling = false
-                    
+                DispatchQueue.main.async {
                     switch result {
                     case .success:
                         self.scheduleSuccess = true
-                        self.errorMessage = nil
-                        // Auto-dismiss after success
+                        self.isScheduling = false
+                        
+                        // Auto-dismiss after showing success
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                             self.onScheduled()
                         }
                     case .permissionDenied:
-                        self.showingPermissionAlert = true
+                        self.errorMessage = "Notification permission denied"
+                        self.isScheduling = false
                     case .invalidDate:
-                        self.errorMessage = "The selected date and time is invalid. Please choose a future date."
+                        self.errorMessage = "Invalid date selected"
+                        self.isScheduling = false
                     case .schedulingFailed(let reason):
-                        self.errorMessage = "Failed to schedule reminder: \(reason)"
+                        self.errorMessage = "Failed to schedule: \(reason)"
+                        self.isScheduling = false
                     }
                 }
+                
             } catch {
-                await MainActor.run {
+                DispatchQueue.main.async {
+                    self.errorMessage = error.localizedDescription
                     self.isScheduling = false
-                    self.errorMessage = "Error scheduling reminder: \(error.localizedDescription)"
                 }
             }
         }
     }
-    
-    private func createScheduledDate() -> Date {
-        let calendar = Calendar.current
-        let timeComponents = calendar.dateComponents([.hour, .minute], from: selectedTime)
-        
-        if !showRecurrenceOptions {
-            // For one-time reminders, use selected date with selected time
-            return calendar.date(
-                bySettingHour: timeComponents.hour ?? 0,
-                minute: timeComponents.minute ?? 0,
-                second: 0,
-                of: selectedDate
-            ) ?? selectedDate
-        } else {
-            // For recurring reminders, use today with selected time
-            let baseDate = calendar.date(
-                bySettingHour: timeComponents.hour ?? 0,
-                minute: timeComponents.minute ?? 0,
-                second: 0,
-                of: Date()
-            ) ?? Date()
-            
-            // For recurring reminders, if the time has already passed today, start tomorrow
-            if baseDate <= Date() {
-                return calendar.date(byAdding: .day, value: 1, to: baseDate) ?? baseDate
-            }
-            
-            return baseDate
-        }
-    }
-    
-    private func requestPermission() async {
-        let granted = await notificationService.requestPermission()
-        if !granted {
-            showingPermissionAlert = true
-        }
-    }
-    
-    private func openNotificationSettings() {
-        if let settingsUrl = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
-            NSWorkspace.shared.open(settingsUrl)
-        }
-    }
-    
-    private func checkNotificationPermission() {
-        if notificationService.permissionStatus == .denied {
-            showingPermissionAlert = true
-        }
-    }
 }
 
-// MARK: - Extensions
-extension TaskPriority {
-    var color: Color {
-        switch self {
-        case .low:
-            return .green
-        case .medium:
-            return .yellow
-        case .high:
-            return .orange
-        case .urgent:
-            return .red
-        }
-    }
-}
-
+// MARK: - Preview
 #Preview {
-    SchedulingView(
-        todo: Todo(title: "Sample Task"),
-        onScheduled: {}
-    )
+    let todo = Todo(title: "Sample Task")
+    
+    SchedulingView(todo: todo) {
+        print("Scheduled")
+    }
+    .frame(width: 600, height: 700)
+    .background(Color.black.opacity(0.3))
 } 

@@ -900,8 +900,9 @@ struct TodoListView: View {
                     return .handled
                 }
             } else if keyPress.characters == "\u{8}" || keyPress.characters == "\u{7F}" {
-                // Handle delete on focused todo
-                if let focusedID = focusedTodoID,
+                // Handle delete on focused todo (only when not editing)
+                if editingTodoID == nil, // Don't delete todo when editing
+                   let focusedID = focusedTodoID,
                    let focusedTodo = (activeTodos + completedTodos).first(where: { $0.id == focusedID }) {
                     withAnimation(.easeInOut(duration: 0.25)) {
                         onDeleteTodo(focusedTodo)
@@ -1619,7 +1620,7 @@ struct DayGroupView: View {
     let onEditingChange: (Bool) -> Void
     let onAddTaskForDay: (Date) -> Void
     
-    @State private var isDropTargeted = false
+    @State private var isDayDropTargeted = false
     
     var body: some View {
         VStack(spacing: 12) {
@@ -1655,61 +1656,75 @@ struct DayGroupView: View {
             .padding(.horizontal, 32)
             .padding(.top, isFirst ? 0 : 24)
             
-            // Drop Zone
+            // Tasks Section - Entire area is a drop zone
             VStack(spacing: 8) {
                 if dayTodos.isEmpty {
-                    // Fast empty state drop zone
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(isDropTargeted ? Color.accent.opacity(0.1) : Color.clear)
-                        .stroke(
-                            isDropTargeted ? Color.accent : Color.black.opacity(0.1),
-                            style: StrokeStyle(lineWidth: 2, dash: [8, 4])
-                        )
-                        .frame(height: 50)
-                        .overlay(
-                            Text(isDropTargeted ? "Drop here" : "No tasks • Drag here")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(isDropTargeted ? Color.accent : Color.tertiaryText)
-                        )
-                        .padding(.horizontal, 32)
-                        .animation(.easeOut(duration: 0.1), value: isDropTargeted)
-                        .dropDestination(for: TodoReference.self) { todoRefs, _ in
-                            guard let todoRef = todoRefs.first,
-                                  let todo = allTodos.first(where: { $0.id == todoRef.id }) else { return false }
-                            
-                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                            onMoveTodo(todo, dayDate)
-                            return true
-                        } isTargeted: { targeted in
-                            isDropTargeted = targeted
+                    // Empty state
+                    VStack(spacing: 12) {
+                        Image(systemName: "calendar.badge.plus")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(isDayDropTargeted ? Color.accent : Color.tertiaryText)
+                        
+                        Text(isDayDropTargeted ? "Drop here" : "No tasks yet")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(isDayDropTargeted ? Color.accent : Color.tertiaryText)
+                        
+                        if !isDayDropTargeted {
+                            Text("Drag tasks here")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color.tertiaryText.opacity(0.7))
                         }
-                } else {
-                    // Professional multi-column layout for 6+ todos
-                    if dayTodos.count > 5 {
-                        professionalMultiColumnLayout
-                    } else {
-                        // Single column layout for 5 or fewer todos
-                        singleColumnLayout
                     }
-                    
-                    // Fast drop zone between tasks
-                    Rectangle()
-                        .fill(isDropTargeted ? Color.accent : Color.clear)
-                        .frame(height: isDropTargeted ? 3 : 1)
-                        .padding(.horizontal, 32)
-                        .animation(.easeOut(duration: 0.08), value: isDropTargeted)
-                        .dropDestination(for: TodoReference.self) { todoRefs, _ in
-                            guard let todoRef = todoRefs.first,
-                                  let todo = allTodos.first(where: { $0.id == todoRef.id }) else { return false }
-                            
-                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                            onMoveTodo(todo, dayDate)
-                            return true
-                        } isTargeted: { targeted in
-                            isDropTargeted = targeted
+                    .frame(minHeight: 80)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(isDayDropTargeted ? Color.accent.opacity(0.1) : Color.clear)
+                            .stroke(
+                                isDayDropTargeted ? Color.accent : Color.black.opacity(0.1),
+                                style: StrokeStyle(lineWidth: 2, dash: [8, 4])
+                            )
+                    )
+                    .padding(.horizontal, 32)
+                    .animation(.easeOut(duration: 0.1), value: isDayDropTargeted)
+                } else {
+                    // Tasks layout
+                    VStack(spacing: 12) {
+                        if dayTodos.count > 5 {
+                            professionalMultiColumnLayout
+                        } else {
+                            singleColumnLayout
                         }
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(isDayDropTargeted ? Color.accent.opacity(0.08) : Color.clear)
+                            .stroke(
+                                isDayDropTargeted ? Color.accent.opacity(0.6) : Color.clear,
+                                lineWidth: 2
+                            )
+                    )
+                    .animation(.easeOut(duration: 0.1), value: isDayDropTargeted)
                 }
             }
+        }
+        .background(
+            // Invisible background to catch drops in empty areas
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.clear)
+                .contentShape(Rectangle())
+        )
+        .dropDestination(for: TodoReference.self) { todoRefs, _ in
+            guard let todoRef = todoRefs.first,
+                  let todo = allTodos.first(where: { $0.id == todoRef.id }) else { return false }
+            
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            onMoveTodo(todo, dayDate)
+            return true
+        } isTargeted: { targeted in
+            isDayDropTargeted = targeted
         }
     }
     
@@ -1728,7 +1743,6 @@ struct DayGroupView: View {
                 editingTodoId: editingTodoID,
                 onEditingChange: onEditingChange
             )
-            .padding(.horizontal, 32)
         }
     }
     
@@ -1792,7 +1806,6 @@ struct DayGroupView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
             }
-            .padding(.horizontal, 32)
             
             // Visual separator for better organization
             if dayTodos.count > 8 {
@@ -1812,7 +1825,6 @@ struct DayGroupView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 32)
                 .padding(.top, 8)
             }
         }
