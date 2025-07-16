@@ -104,7 +104,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var todos: [Todo]
     @State private var showSidebar = true
-    @State private var showingAPIKeySetup = false
+
     @State private var showingSchedulingView = false
     @State private var selectedTodoForScheduling: Todo?
     @State private var taskCreationViewModel: TaskCreationViewModel?
@@ -187,7 +187,7 @@ struct ContentView: View {
         
         // Sort todos within each day
         for i in 0..<groups.count {
-            groups[i].2.sort { $0.createdAt > $1.createdAt }
+            groups[i].2.sort { $0.sortOrder < $1.sortOrder }
         }
         
         return groups
@@ -204,6 +204,7 @@ struct ContentView: View {
                 onToggleComplete: toggleTodoComplete,
                 onScheduleTodo: showSchedulingView,
                 onMoveTodo: moveTodoToDay,
+                onReorderTodos: reorderTodos,
                 onCompleteCleanup: completeCleanup,
                 showSidebar: $showSidebar,
                 onFocusInput: focusTaskInput,
@@ -227,9 +228,7 @@ struct ContentView: View {
                             showSidebar = false
                         }
                     },
-                    onSettings: {
-                        showingAPIKeySetup = true
-                    }
+
                 )
                 .transition(.asymmetric(
                     insertion: .move(edge: .leading).combined(with: .opacity),
@@ -254,21 +253,7 @@ struct ContentView: View {
                 .allowsHitTesting(true)
             }
             
-            // API Key Setup Overlay
-            if showingAPIKeySetup {
-                ZStack {
-                    Color.black.opacity(0.6)
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            showingAPIKeySetup = false
-                        }
-                    
-                    APIKeySetupView(isPresented: $showingAPIKeySetup)
-                        .padding(32)
-                }
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                .zIndex(200)
-            }
+
             
             // Scheduling View Overlay
             if showingSchedulingView, let selectedTodo = selectedTodoForScheduling {
@@ -451,6 +436,25 @@ struct ContentView: View {
         
         print("✅ Complete cleanup finished!")
     }
+    
+    private func reorderTodos(_ todos: [Todo], movedTodo: Todo, to newIndex: Int) {
+        // Remove the moved todo from its current position
+        var reorderedTodos = todos
+        guard let currentIndex = reorderedTodos.firstIndex(where: { $0.id == movedTodo.id }) else { return }
+        reorderedTodos.remove(at: currentIndex)
+        
+        // Insert at the new position
+        let safeIndex = min(newIndex, reorderedTodos.count)
+        reorderedTodos.insert(movedTodo, at: safeIndex)
+        
+        // Update sortOrder for all todos to maintain order
+        for (index, todo) in reorderedTodos.enumerated() {
+            todo.sortOrder = index
+        }
+        
+        // Save immediately - no debouncing delay
+        try? modelContext.save()
+    }
 }
 
 struct FloatingSidebarView: View {
@@ -458,7 +462,6 @@ struct FloatingSidebarView: View {
     let selectedView: TodoViewType
     let onViewChange: (TodoViewType) -> Void
     let onDismiss: () -> Void
-    let onSettings: () -> Void
     @State private var isHovered = false
     
     var body: some View {
@@ -521,28 +524,7 @@ struct FloatingSidebarView: View {
                 Divider()
                     .background(Color.black.opacity(0.08))
                 
-                // Settings button
-                Button(action: onSettings) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "gear")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(Color.secondaryText)
-                            .frame(width: 20)
-                        
-                        Text("Settings")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color.secondaryText)
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.black.opacity(0.02))
-                    )
-                }
-                .buttonStyle(.plain)
+
                 
                 Text("⌘+B to toggle sidebar")
                     .font(.system(size: 11, weight: .medium))
@@ -705,6 +687,7 @@ struct TodoListView: View {
     let onToggleComplete: (Todo) -> Void
     let onScheduleTodo: (Todo) -> Void
     let onMoveTodo: (Todo, Date) -> Void
+    let onReorderTodos: ([Todo], Todo, Int) -> Void
     let onCompleteCleanup: () async -> Void
     @Binding var showSidebar: Bool
     let onFocusInput: () -> Void
@@ -714,11 +697,11 @@ struct TodoListView: View {
     @State private var editingTodoID: UUID?
     
     var activeTodos: [Todo] {
-        todos.filter { !$0.isCompleted }.sorted { $0.createdAt > $1.createdAt }
+        todos.filter { !$0.isCompleted }.sorted { $0.sortOrder < $1.sortOrder }
     }
     
     var completedTodos: [Todo] {
-        todos.filter { $0.isCompleted }.sorted { $0.createdAt > $1.createdAt }
+        todos.filter { $0.isCompleted }.sorted { $0.sortOrder < $1.sortOrder }
     }
     
     var body: some View {
@@ -761,32 +744,7 @@ struct TodoListView: View {
                     
                     Spacer()
                     
-                    // Debug button for notifications
-                    Button(action: {
-                        print("🔔 Debug button clicked!")
-                        Task {
-                            await TaskScheduler.shared.debugScheduledNotifications()
-                        }
-                    }) {
-                        Image(systemName: "bell.badge")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(Color.accentYellow)
-                            .frame(width: 36, height: 36)
-                            .background(
-                                LinearGradient(
-                                    colors: [
-                                        Color.accentYellow.opacity(0.2),
-                                        Color.accentYellow.opacity(0.1)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Debug scheduled notifications")
-                    
+
                     // Cleanup button for notifications
                     Button(action: {
                         print("🧹 Complete cleanup button clicked!")
@@ -842,6 +800,7 @@ struct TodoListView: View {
                                 onDeleteTodo: onDeleteTodo,
                                 onScheduleTodo: onScheduleTodo,
                                 onMoveTodo: onMoveTodo,
+                                onReorderTodos: onReorderTodos,
                                 focusedTodoID: focusedTodoID,
                                 onFocus: { focusedTodoID = $0 },
                                 editingTodoID: editingTodoID,
@@ -854,26 +813,23 @@ struct TodoListView: View {
                             )
                         }
                     } else {
-                        // Regular view (Today)
-                        // Active todos
-                        ForEach(activeTodos) { todo in
-                            TodoRowView(
-                                todo: todo,
-                                onToggleComplete: { onToggleComplete(todo) },
-                                onDelete: { onDeleteTodo(todo) },
-                                onSchedule: { onScheduleTodo(todo) },
-                                isFocused: focusedTodoID == todo.id,
-                                onFocus: { focusedTodoID = todo.id },
-                                isEditingTriggered: editingTodoID == todo.id,
-                                onEditingChange: { isEditing in
-                                    if !isEditing {
-                                        editingTodoID = nil
-                                    }
+                        // Regular view (Today) - with real-time drag and drop reordering
+                        RealTimeReorderableListView(
+                            todos: activeTodos,
+                            onToggleComplete: onToggleComplete,
+                            onDelete: onDeleteTodo,
+                            onSchedule: onScheduleTodo,
+                            onReorder: onReorderTodos,
+                            focusedTodoId: focusedTodoID,
+                            onFocus: { focusedTodoID = $0 },
+                            editingTodoId: editingTodoID,
+                            onEditingChange: { isEditing in
+                                if !isEditing {
+                                    editingTodoID = nil
                                 }
-                            )
-                            .padding(.horizontal, 32)
-                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                        }
+                            }
+                        )
+                        .padding(.horizontal, 32)
                         
                         // Completed section
                         if !completedTodos.isEmpty {
@@ -961,57 +917,7 @@ struct TodoListView: View {
                 isMainViewFocused = true
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 8) {
-                    // AI Smart Input Button
-                    Button(action: {
-                        onFocusInput()
-                    }) {
-                        Image(systemName: "brain.head.profile")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                LinearGradient(
-                                    colors: [
-                                        Color.accentPurple,
-                                        Color.accentPink
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(KeyEquivalent("i"), modifiers: [.command])
-                    
-                    // Regular Add Button (now focuses input)
-                    Button(action: {
-                        onFocusInput()
-                    }) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                LinearGradient(
-                                    colors: [
-                                        Color.accentGreen,
-                                        Color.accentSecondary
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(KeyEquivalent("n"), modifiers: [.command])
-                }
-            }
-        }
+
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button(action: {
@@ -1475,6 +1381,223 @@ struct TodoRowView: View {
     }
 }
 
+// MARK: - Fast Reorderable Todo Row View
+struct ReorderableTodoRowView: View {
+    let todo: Todo
+    let todos: [Todo]
+    let onToggleComplete: () -> Void
+    let onDelete: () -> Void
+    let onSchedule: () -> Void
+    let onReorder: ([Todo], Todo, Int) -> Void
+    let isFocused: Bool
+    let onFocus: () -> Void
+    let isEditingTriggered: Bool
+    let onEditingChange: (Bool) -> Void
+    
+    @State private var isDragging = false
+    @State private var dragOffset: CGSize = .zero
+    @State private var isHovered = false
+    
+    var body: some View {
+        TodoRowView(
+            todo: todo,
+            onToggleComplete: onToggleComplete,
+            onDelete: onDelete,
+            onSchedule: onSchedule,
+            isFocused: isFocused,
+            onFocus: onFocus,
+            isEditingTriggered: isEditingTriggered,
+            onEditingChange: onEditingChange
+        )
+        .opacity(isDragging ? 0.6 : 1.0)
+        .scaleEffect(isDragging ? 0.98 : 1.0)
+        .offset(dragOffset)
+        .animation(.easeOut(duration: 0.1), value: isDragging)
+        .animation(.easeOut(duration: 0.1), value: dragOffset)
+        .draggable(TodoReference(id: todo.id)) {
+            // Drag preview
+            TodoRowView(
+                todo: todo,
+                onToggleComplete: {},
+                onDelete: {},
+                onSchedule: {},
+                isFocused: false,
+                onFocus: {},
+                isEditingTriggered: false,
+                onEditingChange: { _ in }
+            )
+            .opacity(0.9)
+            .background(Color.white.opacity(0.95))
+            .cornerRadius(12)
+            .shadow(radius: 8)
+        }
+        .onDrag {
+            isDragging = true
+            return NSItemProvider()
+        }
+        .simultaneousGesture(
+            DragGesture()
+                .onChanged { value in
+                    dragOffset = value.translation
+                }
+                .onEnded { _ in
+                    isDragging = false
+                    dragOffset = .zero
+                }
+        )
+        .dropDestination(for: TodoReference.self) { todoRefs, location in
+            guard let todoRef = todoRefs.first,
+                  let draggedTodo = todos.first(where: { $0.id == todoRef.id }),
+                  let targetIndex = todos.firstIndex(where: { $0.id == todo.id }) else { return false }
+            
+            onReorder(todos, draggedTodo, targetIndex)
+            return true
+        } isTargeted: { targeted in
+            // Real-time visual feedback during drag
+            withAnimation(.easeOut(duration: 0.1)) {
+                isHovered = targeted
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isHovered ? Color.accent.opacity(0.1) : Color.clear)
+                .animation(.easeOut(duration: 0.1), value: isHovered)
+        )
+    }
+}
+
+// MARK: - Real-Time Reorderable List View
+struct RealTimeReorderableListView: View {
+    let todos: [Todo]
+    let onToggleComplete: (Todo) -> Void
+    let onDelete: (Todo) -> Void
+    let onSchedule: (Todo) -> Void
+    let onReorder: ([Todo], Todo, Int) -> Void
+    let focusedTodoId: UUID?
+    let onFocus: (UUID) -> Void
+    let editingTodoId: UUID?
+    let onEditingChange: (Bool) -> Void
+    
+    @State private var draggedTodo: Todo?
+    @State private var draggedOverIndex: Int?
+    
+    var displayTodos: [Todo] {
+        if let draggedTodo = draggedTodo,
+           let draggedOverIndex = draggedOverIndex {
+            var temp = todos.filter { $0.id != draggedTodo.id }
+            temp.insert(draggedTodo, at: min(draggedOverIndex, temp.count))
+            return temp
+        }
+        return todos
+    }
+    
+    var body: some View {
+        LazyVStack(spacing: 12) {
+            ForEach(Array(displayTodos.enumerated()), id: \.element.id) { indexAndTodo in
+                let index = indexAndTodo.offset
+                let todo = indexAndTodo.element
+                let isBeingDragged = draggedTodo?.id == todo.id
+                
+                TodoRowView(
+                    todo: todo,
+                    onToggleComplete: { onToggleComplete(todo) },
+                    onDelete: { onDelete(todo) },
+                    onSchedule: { onSchedule(todo) },
+                    isFocused: focusedTodoId == todo.id,
+                    onFocus: { onFocus(todo.id) },
+                    isEditingTriggered: editingTodoId == todo.id,
+                    onEditingChange: { editing in 
+                        onEditingChange(editing)
+                    }
+                )
+                .opacity(isBeingDragged ? 0.3 : 1.0)
+                .animation(.easeOut(duration: 0.1), value: isBeingDragged)
+                .id(todo.id)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing),
+                    removal: .move(edge: .leading)
+                ))
+                .animation(.easeOut(duration: 0.15), value: displayTodos.count)
+                .draggable(TodoReference(id: todo.id)) {
+                    // Minimal drag preview
+                    TodoRowView(
+                        todo: todo,
+                        onToggleComplete: {},
+                        onDelete: {},
+                        onSchedule: {},
+                        isFocused: false,
+                        onFocus: {},
+                        isEditingTriggered: false,
+                        onEditingChange: { _ in }
+                    )
+                    .opacity(0.9)
+                    .background(Color.white.opacity(0.95))
+                    .cornerRadius(12)
+                    .shadow(radius: 6)
+                }
+                .onDrag {
+                    draggedTodo = todo
+                    return NSItemProvider()
+                }
+                .dropDestination(for: TodoReference.self) { todoRefs, location in
+                    guard let todoRef = todoRefs.first,
+                          let draggedTodo = todos.first(where: { $0.id == todoRef.id }) else { return false }
+                    
+                    // Commit the reorder
+                    onReorder(todos, draggedTodo, index)
+                    
+                    // Reset drag state
+                    self.draggedTodo = nil
+                    self.draggedOverIndex = nil
+                    
+                    return true
+                } isTargeted: { targeted in
+                    if targeted {
+                        draggedOverIndex = index
+                    } else if draggedOverIndex == index {
+                        draggedOverIndex = nil
+                    }
+                }
+            }
+        }
+        .onChange(of: todos) { _, _ in
+            // Reset drag state when todos change
+            draggedTodo = nil
+            draggedOverIndex = nil
+        }
+    }
+}
+
+// MARK: - Fast Drag Preview
+struct FastDragPreview: View {
+    let todo: Todo
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(todo.isCompleted ? Color.completedColor : Color.accent)
+                .frame(width: 12, height: 12)
+            
+            Text(todo.title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(Color.primaryText)
+                .lineLimit(1)
+            
+            Spacer()
+            
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 12))
+                .foregroundColor(Color.accent)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(radius: 4)
+        .frame(maxWidth: 200)
+    }
+}
+
 // MARK: - Day Group View with Drag & Drop
 struct DayGroupView: View {
     let dayName: String
@@ -1486,6 +1609,7 @@ struct DayGroupView: View {
     let onDeleteTodo: (Todo) -> Void
     let onScheduleTodo: (Todo) -> Void
     let onMoveTodo: (Todo, Date) -> Void
+    let onReorderTodos: ([Todo], Todo, Int) -> Void
     let focusedTodoID: UUID?
     let onFocus: (UUID) -> Void
     let editingTodoID: UUID?
@@ -1531,68 +1655,162 @@ struct DayGroupView: View {
             // Drop Zone
             VStack(spacing: 8) {
                 if dayTodos.isEmpty {
-                    // Empty state with drop zone
+                    // Fast empty state drop zone
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(isDropTargeted ? Color.accent.opacity(0.2) : Color.clear)
+                        .fill(isDropTargeted ? Color.accent.opacity(0.1) : Color.clear)
                         .stroke(
                             isDropTargeted ? Color.accent : Color.black.opacity(0.1),
-                            style: StrokeStyle(lineWidth: 2, dash: isDropTargeted ? [] : [8, 4])
+                            style: StrokeStyle(lineWidth: 2, dash: [8, 4])
                         )
-                        .frame(height: 60)
+                        .frame(height: 50)
                         .overlay(
-                            Text(isDropTargeted ? "Drop here" : "No tasks • Drag tasks here")
+                            Text(isDropTargeted ? "Drop here" : "No tasks • Drag here")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(isDropTargeted ? Color.accent : Color.tertiaryText)
                         )
                         .padding(.horizontal, 32)
-                        .dropDestination(for: TodoReference.self) { todoRefs, location in
+                        .animation(.easeOut(duration: 0.1), value: isDropTargeted)
+                        .dropDestination(for: TodoReference.self) { todoRefs, _ in
                             guard let todoRef = todoRefs.first,
                                   let todo = allTodos.first(where: { $0.id == todoRef.id }) else { return false }
+                            
+                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                             onMoveTodo(todo, dayDate)
                             return true
                         } isTargeted: { targeted in
                             isDropTargeted = targeted
                         }
                 } else {
-                    // Tasks with drop zone
-                    ForEach(dayTodos) { todo in
-                        DraggableTodoRowView(
-                            todo: todo,
-                            onToggleComplete: { onToggleComplete(todo) },
-                            onDelete: { onDeleteTodo(todo) },
-                            onSchedule: { onScheduleTodo(todo) },
-                            isFocused: focusedTodoID == todo.id,
-                            onFocus: { onFocus(todo.id) },
-                            isEditingTriggered: editingTodoID == todo.id,
-                            onEditingChange: onEditingChange
-                        )
-                        .padding(.horizontal, 32)
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    // Professional multi-column layout for 6+ todos
+                    if dayTodos.count > 5 {
+                        professionalMultiColumnLayout
+                    } else {
+                        // Single column layout for 5 or fewer todos
+                        singleColumnLayout
                     }
                     
-                    // Drop zone between tasks
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(isDropTargeted ? Color.accent.opacity(0.1) : Color.clear)
-                        .stroke(
-                            isDropTargeted ? Color.accent : Color.clear,
-                            style: StrokeStyle(lineWidth: 2)
-                        )
-                        .frame(height: isDropTargeted ? 40 : 20)
-                        .overlay(
-                            Text(isDropTargeted ? "Drop here" : "")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Color.accent)
-                        )
+                    // Fast drop zone between tasks
+                    Rectangle()
+                        .fill(isDropTargeted ? Color.accent : Color.clear)
+                        .frame(height: isDropTargeted ? 3 : 1)
                         .padding(.horizontal, 32)
-                        .dropDestination(for: TodoReference.self) { todoRefs, location in
+                        .animation(.easeOut(duration: 0.08), value: isDropTargeted)
+                        .dropDestination(for: TodoReference.self) { todoRefs, _ in
                             guard let todoRef = todoRefs.first,
                                   let todo = allTodos.first(where: { $0.id == todoRef.id }) else { return false }
+                            
+                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                             onMoveTodo(todo, dayDate)
                             return true
                         } isTargeted: { targeted in
                             isDropTargeted = targeted
                         }
                 }
+            }
+        }
+    }
+    
+    // MARK: - Layout Computed Properties
+    
+    private var singleColumnLayout: some View {
+        VStack(spacing: 8) {
+            RealTimeReorderableListView(
+                todos: dayTodos,
+                onToggleComplete: onToggleComplete,
+                onDelete: onDeleteTodo,
+                onSchedule: onScheduleTodo,
+                onReorder: onReorderTodos,
+                focusedTodoId: focusedTodoID,
+                onFocus: onFocus,
+                editingTodoId: editingTodoID,
+                onEditingChange: onEditingChange
+            )
+            .padding(.horizontal, 32)
+        }
+    }
+    
+    private var professionalMultiColumnLayout: some View {
+        VStack(spacing: 16) {
+            // Professional multi-column grid with real-time reordering
+            let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 2)
+            
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(Array(dayTodos.enumerated()), id: \.element.id) { indexAndTodo in
+                    let index = indexAndTodo.offset
+                    let todo = indexAndTodo.element
+                    TodoRowView(
+                        todo: todo,
+                        onToggleComplete: { onToggleComplete(todo) },
+                        onDelete: { onDeleteTodo(todo) },
+                        onSchedule: { onScheduleTodo(todo) },
+                        isFocused: focusedTodoID == todo.id,
+                        onFocus: { onFocus(todo.id) },
+                        isEditingTriggered: editingTodoID == todo.id,
+                        onEditingChange: { editing in 
+                            onEditingChange(editing)
+                        }
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.white.opacity(0.4))
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(.ultraThinMaterial)
+                                    .opacity(0.3)
+                            )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.05), lineWidth: 1)
+                    )
+                    .draggable(TodoReference(id: todo.id)) {
+                        TodoRowView(
+                            todo: todo,
+                            onToggleComplete: {},
+                            onDelete: {},
+                            onSchedule: {},
+                            isFocused: false,
+                            onFocus: {},
+                            isEditingTriggered: false,
+                            onEditingChange: { _ in }
+                        )
+                        .opacity(0.9)
+                        .background(Color.white.opacity(0.95))
+                        .cornerRadius(12)
+                        .shadow(radius: 6)
+                    }
+                    .dropDestination(for: TodoReference.self) { todoRefs, location in
+                        guard let todoRef = todoRefs.first,
+                              let draggedTodo = dayTodos.first(where: { $0.id == todoRef.id }) else { return false }
+                        
+                        onReorderTodos(dayTodos, draggedTodo, index)
+                        return true
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+            }
+            .padding(.horizontal, 32)
+            
+            // Visual separator for better organization
+            if dayTodos.count > 8 {
+                HStack {
+                    Text("Showing \(dayTodos.count) tasks")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color.tertiaryText)
+                    
+                    Spacer()
+                    
+                    // Subtle indicator for multi-column layout
+                    HStack(spacing: 4) {
+                        ForEach(0..<2) { _ in
+                            Rectangle()
+                                .fill(Color.accentPurple.opacity(0.3))
+                                .frame(width: 8, height: 2)
+                        }
+                    }
+                }
+                .padding(.horizontal, 32)
+                .padding(.top, 8)
             }
         }
     }
@@ -1669,7 +1887,7 @@ struct CalendarView: View {
         return todos.filter { todo in
             let todoDate = todo.dueDate ?? todo.createdAt
             return calendar.isDate(todoDate, inSameDayAs: date)
-        }
+        }.sorted { $0.sortOrder < $1.sortOrder }
     }
     
     // Get the first day of the month to calculate offset
@@ -1683,137 +1901,36 @@ struct CalendarView: View {
     }
     
     var body: some View {
-        VStack(spacing: 24) {
-            // Month Navigation
-            HStack {
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth)!
-                    }
-                }) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Color.accentPurple)
-                        .frame(width: 32, height: 32)
-                        .background(Color.accentPurple.opacity(0.1))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                
-                Spacer()
-                
-                Text(currentMonth.formatted(.dateTime.month(.wide).year()))
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(Color.primaryText)
-                
-                Spacer()
-                
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        currentMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth)!
-                    }
-                }) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Color.accentPurple)
-                        .frame(width: 32, height: 32)
-                        .background(Color.accentPurple.opacity(0.1))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 32)
+        VStack(spacing: 0) {
+            // Professional Calendar Header
+            calendarHeader
             
-            // Calendar Grid
+            // Calendar Grid Container
             VStack(spacing: 0) {
-                // Weekday headers
-                HStack(spacing: 0) {
-                    ForEach(calendar.weekdaySymbols, id: \.self) { weekday in
-                        Text(String(weekday.prefix(3)))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(Color.secondaryText)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 40)
-                    }
-                }
+                // Weekday Headers
+                weekdayHeaders
                 
-                // Calendar days
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 0) {
-                    // Empty cells for days before month starts
-                    ForEach(0..<firstDayWeekday, id: \.self) { _ in
-                        Rectangle()
-                            .fill(Color.clear)
-                            .frame(height: 60)
-                    }
-                    
-                    // Days of the month
-                    ForEach(monthDays, id: \.self) { date in
-                        CalendarDayView(
-                            date: date,
-                            todos: todosForDate(date),
-                            isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
-                            isToday: calendar.isDate(date, inSameDayAs: Date()),
-                            onTap: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    selectedDate = date
-                                    selectedDayTodos = todosForDate(date)
-                                }
-                            },
-                            onAddTask: { onAddTaskForDay(date) }
-                        )
-                    }
-                }
+                // Calendar Grid
+                calendarGrid
             }
-            .padding(.horizontal, 32)
             .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.cardBackground)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.4))
                     .background(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .fill(.ultraThinMaterial)
-                            .opacity(0.3)
+                            .opacity(0.6)
                     )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Color.glassBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
             )
+            .padding(.horizontal, 32)
             
-            // Selected day todos
+            // Selected Day Tasks Section
             if !selectedDayTodos.isEmpty {
-                VStack(spacing: 12) {
-                    HStack {
-                        Text("Tasks for \(selectedDate.formatted(.dateTime.weekday(.wide).month().day()))")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(Color.primaryText)
-                        
-                        Spacer()
-                        
-                        Text("\(selectedDayTodos.count)")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.tertiaryText)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.tertiaryText.opacity(0.1))
-                            .clipShape(Capsule())
-                    }
-                    .padding(.horizontal, 32)
-                    
-                    ForEach(selectedDayTodos) { todo in
-                        TodoRowView(
-                            todo: todo,
-                            onToggleComplete: { onToggleComplete(todo) },
-                            onDelete: { onDeleteTodo(todo) },
-                            onSchedule: { onScheduleTodo(todo) },
-                            isFocused: false,
-                            onFocus: { },
-                            isEditingTriggered: false,
-                            onEditingChange: { _ in }
-                        )
-                        .padding(.horizontal, 32)
-                    }
-                }
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                selectedDayTasksSection
             }
         }
         .onAppear {
@@ -1822,6 +1939,166 @@ struct CalendarView: View {
         .onChange(of: todos) { oldValue, newValue in
             selectedDayTodos = todosForDate(selectedDate)
         }
+    }
+    
+    // MARK: - Calendar Components
+    
+    private var calendarHeader: some View {
+        HStack {
+            // Previous month button
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth)!
+                }
+            }) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.accentPurple, Color.accentPink],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(Circle())
+                    .shadow(color: Color.accentPurple.opacity(0.3), radius: 4, x: 0, y: 2)
+            }
+            .buttonStyle(.plain)
+            .scaleEffect(1.0)
+            .onTapGesture {
+                // Empty - handled by Button action
+            }
+            
+            Spacer()
+            
+            // Month and year display
+            VStack(spacing: 2) {
+                Text(currentMonth.formatted(.dateTime.month(.wide)))
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(Color.primaryText)
+                
+                Text(currentMonth.formatted(.dateTime.year()))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color.secondaryText)
+            }
+            
+            Spacer()
+            
+            // Next month button
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth)!
+                }
+            }) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.accentPurple, Color.accentPink],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(Circle())
+                    .shadow(color: Color.accentPurple.opacity(0.3), radius: 4, x: 0, y: 2)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 32)
+        .padding(.bottom, 24)
+    }
+    
+    private var weekdayHeaders: some View {
+        HStack(spacing: 0) {
+            ForEach(calendar.weekdaySymbols, id: \.self) { weekday in
+                Text(String(weekday.prefix(3)))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color.secondaryText)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+        }
+        .background(Color.white.opacity(0.2))
+        .overlay(
+            Rectangle()
+                .fill(Color.black.opacity(0.06))
+                .frame(height: 1),
+            alignment: .bottom
+        )
+    }
+    
+    private var calendarGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 1), count: 7), spacing: 1) {
+            // Empty cells for days before month starts
+            ForEach(0..<firstDayWeekday, id: \.self) { _ in
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(height: 70)
+            }
+            
+            // Days of the month
+            ForEach(monthDays, id: \.self) { date in
+                CalendarDayView(
+                    date: date,
+                    todos: todosForDate(date),
+                    isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
+                    isToday: calendar.isDate(date, inSameDayAs: Date()),
+                    onTap: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedDate = date
+                            selectedDayTodos = todosForDate(date)
+                        }
+                    },
+                    onAddTask: { onAddTaskForDay(date) }
+                )
+            }
+        }
+        .background(Color.white.opacity(0.1))
+    }
+    
+    private var selectedDayTasksSection: some View {
+        VStack(spacing: 16) {
+            // Section header
+            HStack {
+                Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(Color.primaryText)
+                
+                Spacer()
+                
+                Text("\(selectedDayTodos.count) task\(selectedDayTodos.count == 1 ? "" : "s")")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color.secondaryText)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.05))
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 32)
+            
+            // Tasks list
+            VStack(spacing: 8) {
+                ForEach(selectedDayTodos) { todo in
+                    TodoRowView(
+                        todo: todo,
+                        onToggleComplete: { onToggleComplete(todo) },
+                        onDelete: { onDeleteTodo(todo) },
+                        onSchedule: { onScheduleTodo(todo) },
+                        isFocused: false,
+                        onFocus: { },
+                        isEditingTriggered: false,
+                        onEditingChange: { _ in }
+                    )
+                    .padding(.horizontal, 32)
+                }
+            }
+        }
+        .padding(.top, 24)
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
     }
 }
 
@@ -1840,67 +2117,36 @@ struct CalendarDayView: View {
     
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 6) {
-                // Day number
+            VStack(spacing: 8) {
+                // Day number with better styling
                 Text("\(calendar.component(.day, from: date))")
-                    .font(.system(size: 14, weight: isToday ? .bold : .medium))
-                    .foregroundColor(
-                        isSelected ? Color.primaryText :
-                        isToday ? Color.accentOrange :
-                        Color.secondaryText
-                    )
+                    .font(.system(size: 16, weight: isToday ? .bold : .semibold))
+                    .foregroundColor(dayNumberColor)
+                    .frame(minWidth: 24)
                 
-                // Todo indicators
-                HStack(spacing: 2) {
-                    ForEach(todos.prefix(3), id: \.id) { todo in
-                        Circle()
-                            .fill(Color.dynamicAccent(for: todo.hashValue))
-                            .frame(width: 4, height: 4)
-                    }
-                    
-                    if todos.count > 3 {
-                        Text("+\(todos.count - 3)")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundColor(Color.tertiaryText)
-                    }
-                }
-                .frame(height: 8)
+                // Enhanced todo indicators
+                todoIndicators
                 
                 Spacer()
                 
-                // Add button on hover
-                if isHovered {
+                // Add button on hover (more subtle)
+                if isHovered && !isSelected {
                     Button(action: onAddTask) {
                         Image(systemName: "plus")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundColor(Color.accentGreen)
-                            .frame(width: 16, height: 16)
-                            .background(Color.accentGreen.opacity(0.1))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 18, height: 18)
+                            .background(Color.accentGreen)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
-            .frame(height: 60)
+            .frame(height: 70)
             .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(
-                        isSelected ? Color.activeBackground :
-                        isToday ? Color.accentOrange.opacity(0.1) :
-                        (isHovered ? Color.hoverBackground : Color.clear)
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(
-                        isSelected ? Color.glassActiveBorder :
-                        isToday ? Color.accentOrange.opacity(0.3) :
-                        Color.clear,
-                        lineWidth: isSelected ? 2 : 1
-                    )
-            )
+            .background(dayBackground)
+            .overlay(dayBorder)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -1908,6 +2154,85 @@ struct CalendarDayView: View {
                 isHovered = hovering
             }
         }
+    }
+    
+    // MARK: - Computed Properties
+    
+    private var dayNumberColor: Color {
+        if isSelected {
+            return .white
+        } else if isToday {
+            return Color.accentOrange
+        } else {
+            return Color.primaryText
+        }
+    }
+    
+    private var todoIndicators: some View {
+        VStack(spacing: 4) {
+            if todos.isEmpty {
+                // Empty state
+                Circle()
+                    .fill(Color.clear)
+                    .frame(width: 6, height: 6)
+            } else {
+                // Show up to 3 todo indicators
+                HStack(spacing: 2) {
+                    ForEach(Array(todos.prefix(3).enumerated()), id: \.offset) { index, todo in
+                        Circle()
+                            .fill(Color.dynamicAccent(for: todo.hashValue))
+                            .frame(width: 6, height: 6)
+                            .opacity(todo.isCompleted ? 0.5 : 1.0)
+                    }
+                    
+                    // Show count if more than 3
+                    if todos.count > 3 {
+                        Text("+\(todos.count - 3)")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(Color.tertiaryText)
+                            .padding(.horizontal, 2)
+                    }
+                }
+                .frame(height: 6)
+            }
+        }
+        .frame(height: 12)
+    }
+    
+    private var dayBackground: some View {
+        RoundedRectangle(cornerRadius: 0, style: .continuous)
+            .fill(backgroundFill)
+    }
+    
+    private var backgroundFill: Color {
+        if isSelected {
+            return Color.accent.opacity(0.8)
+        } else if isToday {
+            return Color.accentOrange.opacity(0.15)
+        } else if isHovered {
+            return Color.white.opacity(0.6)
+        } else {
+            return Color.white.opacity(0.1)
+        }
+    }
+    
+    private var dayBorder: some View {
+        RoundedRectangle(cornerRadius: 0, style: .continuous)
+            .strokeBorder(borderColor, lineWidth: borderWidth)
+    }
+    
+    private var borderColor: Color {
+        if isSelected {
+            return Color.accent.opacity(0.3)
+        } else if isToday {
+            return Color.accentOrange.opacity(0.4)
+        } else {
+            return Color.black.opacity(0.06)
+        }
+    }
+    
+    private var borderWidth: CGFloat {
+        return isSelected ? 2 : 0.5
     }
 }
 
