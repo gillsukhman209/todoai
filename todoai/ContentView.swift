@@ -10,13 +10,13 @@ import SwiftData
 
 // MARK: - View Types
 enum TodoViewType: String, CaseIterable {
-    case inbox = "Inbox"
+    case calendar = "Calendar"
     case today = "Today"
     case upcoming = "Upcoming"
     
     var icon: String {
         switch self {
-        case .inbox: return "tray.fill"
+        case .calendar: return "calendar.circle.fill"
         case .today: return "calendar"
         case .upcoming: return "calendar.badge.clock"
         }
@@ -108,7 +108,7 @@ struct ContentView: View {
     @State private var showingSchedulingView = false
     @State private var selectedTodoForScheduling: Todo?
     @State private var taskCreationViewModel: TaskCreationViewModel?
-    @State private var selectedView: TodoViewType = .inbox
+    @State private var selectedView: TodoViewType = .calendar
     @State private var focusInputTrigger = false
     
     init() {
@@ -120,8 +120,8 @@ struct ContentView: View {
     
     private var filteredTodos: [Todo] {
         switch selectedView {
-        case .inbox:
-            return todos
+        case .calendar:
+            return todos // Show all todos for calendar view
         case .today:
             return todayTodos
         case .upcoming:
@@ -503,7 +503,7 @@ struct FloatingSidebarView: View {
                     SidebarItemView(
                         icon: viewType.icon,
                         title: viewType.rawValue,
-                        count: viewType == .inbox ? activeTodoCount : nil,
+                        count: viewType == .calendar ? activeTodoCount : nil,
                         isSelected: selectedView == viewType,
                         accentColor: Color.dynamicAccent(for: index),
                         onTap: {
@@ -888,7 +888,17 @@ struct TodoListView: View {
                 
                 // Clean task list
                 LazyVStack(spacing: 8) {
-                    if selectedView == .upcoming {
+                    if selectedView == .calendar {
+                        // Calendar view
+                        CalendarView(
+                            todos: todos,
+                            onToggleComplete: onToggleComplete,
+                            onDeleteTodo: onDeleteTodo,
+                            onScheduleTodo: onScheduleTodo,
+                            onMoveTodo: onMoveTodo,
+                            onAddTaskForDay: onAddTaskForDay
+                        )
+                    } else if selectedView == .upcoming {
                         // Upcoming view - grouped by day
                         ForEach(groupedUpcomingTodos, id: \.0) { dayName, dayDate, dayTodos in
                             DayGroupView(
@@ -913,7 +923,7 @@ struct TodoListView: View {
                             )
                         }
                     } else {
-                        // Regular view (Inbox or Today)
+                        // Regular view (Today)
                         // Active todos
                         ForEach(activeTodos) { todo in
                             TodoRowView(
@@ -1812,6 +1822,278 @@ struct DraggableTodoRowView: View {
             .background(Color.cardBackground)
             .cornerRadius(8)
             .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+    }
+}
+
+// MARK: - Calendar View
+struct CalendarView: View {
+    let todos: [Todo]
+    let onToggleComplete: (Todo) -> Void
+    let onDeleteTodo: (Todo) -> Void
+    let onScheduleTodo: (Todo) -> Void
+    let onMoveTodo: (Todo, Date) -> Void
+    let onAddTaskForDay: (Date) -> Void
+    
+    @State private var selectedDate = Date()
+    @State private var currentMonth = Date()
+    @State private var selectedDayTodos: [Todo] = []
+    
+    private let calendar = Calendar.current
+    
+    // Get all days in the current month
+    private var monthDays: [Date] {
+        let range = calendar.range(of: .day, in: .month, for: currentMonth)!
+        let startOfMonth = calendar.dateInterval(of: .month, for: currentMonth)!.start
+        
+        return range.compactMap { day in
+            calendar.date(byAdding: .day, value: day - 1, to: startOfMonth)
+        }
+    }
+    
+    // Get todos for a specific date
+    private func todosForDate(_ date: Date) -> [Todo] {
+        return todos.filter { todo in
+            let todoDate = todo.dueDate ?? todo.createdAt
+            return calendar.isDate(todoDate, inSameDayAs: date)
+        }
+    }
+    
+    // Get the first day of the month to calculate offset
+    private var firstDayOfMonth: Date {
+        calendar.dateInterval(of: .month, for: currentMonth)!.start
+    }
+    
+    // Get the weekday of the first day (0 = Sunday, 1 = Monday, etc.)
+    private var firstDayWeekday: Int {
+        calendar.component(.weekday, from: firstDayOfMonth) - 1
+    }
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            // Month Navigation
+            HStack {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth)!
+                    }
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color.accentPurple)
+                        .frame(width: 32, height: 32)
+                        .background(Color.accentPurple.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                Text(currentMonth.formatted(.dateTime.month(.wide).year()))
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(Color.primaryText)
+                
+                Spacer()
+                
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        currentMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth)!
+                    }
+                }) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color.accentPurple)
+                        .frame(width: 32, height: 32)
+                        .background(Color.accentPurple.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 32)
+            
+            // Calendar Grid
+            VStack(spacing: 0) {
+                // Weekday headers
+                HStack(spacing: 0) {
+                    ForEach(calendar.weekdaySymbols, id: \.self) { weekday in
+                        Text(String(weekday.prefix(3)))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(Color.secondaryText)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                    }
+                }
+                
+                // Calendar days
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 0) {
+                    // Empty cells for days before month starts
+                    ForEach(0..<firstDayWeekday, id: \.self) { _ in
+                        Rectangle()
+                            .fill(Color.clear)
+                            .frame(height: 60)
+                    }
+                    
+                    // Days of the month
+                    ForEach(monthDays, id: \.self) { date in
+                        CalendarDayView(
+                            date: date,
+                            todos: todosForDate(date),
+                            isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
+                            isToday: calendar.isDate(date, inSameDayAs: Date()),
+                            onTap: {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    selectedDate = date
+                                    selectedDayTodos = todosForDate(date)
+                                }
+                            },
+                            onAddTask: { onAddTaskForDay(date) }
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 32)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.cardBackground)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .opacity(0.3)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Color.glassBorder, lineWidth: 1)
+            )
+            
+            // Selected day todos
+            if !selectedDayTodos.isEmpty {
+                VStack(spacing: 12) {
+                    HStack {
+                        Text("Tasks for \(selectedDate.formatted(.dateTime.weekday(.wide).month().day()))")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(Color.primaryText)
+                        
+                        Spacer()
+                        
+                        Text("\(selectedDayTodos.count)")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Color.tertiaryText)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.tertiaryText.opacity(0.1))
+                            .clipShape(Capsule())
+                    }
+                    .padding(.horizontal, 32)
+                    
+                    ForEach(selectedDayTodos) { todo in
+                        TodoRowView(
+                            todo: todo,
+                            onToggleComplete: { onToggleComplete(todo) },
+                            onDelete: { onDeleteTodo(todo) },
+                            onSchedule: { onScheduleTodo(todo) },
+                            isFocused: false,
+                            onFocus: { },
+                            isEditingTriggered: false,
+                            onEditingChange: { _ in }
+                        )
+                        .padding(.horizontal, 32)
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+        }
+        .onAppear {
+            selectedDayTodos = todosForDate(selectedDate)
+        }
+        .onChange(of: todos) { oldValue, newValue in
+            selectedDayTodos = todosForDate(selectedDate)
+        }
+    }
+}
+
+// MARK: - Calendar Day View
+struct CalendarDayView: View {
+    let date: Date
+    let todos: [Todo]
+    let isSelected: Bool
+    let isToday: Bool
+    let onTap: () -> Void
+    let onAddTask: () -> Void
+    
+    @State private var isHovered = false
+    
+    private let calendar = Calendar.current
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 6) {
+                // Day number
+                Text("\(calendar.component(.day, from: date))")
+                    .font(.system(size: 14, weight: isToday ? .bold : .medium))
+                    .foregroundColor(
+                        isSelected ? Color.primaryText :
+                        isToday ? Color.accentOrange :
+                        Color.secondaryText
+                    )
+                
+                // Todo indicators
+                HStack(spacing: 2) {
+                    ForEach(todos.prefix(3), id: \.id) { todo in
+                        Circle()
+                            .fill(Color.dynamicAccent(for: todo.hashValue))
+                            .frame(width: 4, height: 4)
+                    }
+                    
+                    if todos.count > 3 {
+                        Text("+\(todos.count - 3)")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundColor(Color.tertiaryText)
+                    }
+                }
+                .frame(height: 8)
+                
+                Spacer()
+                
+                // Add button on hover
+                if isHovered {
+                    Button(action: onAddTask) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundColor(Color.accentGreen)
+                            .frame(width: 16, height: 16)
+                            .background(Color.accentGreen.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                }
+            }
+            .frame(height: 60)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(
+                        isSelected ? Color.activeBackground :
+                        isToday ? Color.accentOrange.opacity(0.1) :
+                        (isHovered ? Color.hoverBackground : Color.clear)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Color.glassActiveBorder :
+                        isToday ? Color.accentOrange.opacity(0.3) :
+                        Color.clear,
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovered = hovering
+            }
         }
     }
 }
