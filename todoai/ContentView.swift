@@ -35,10 +35,10 @@ extension Color {
     static let accentYellow = Color(red: 0.9, green: 0.8, blue: 0.2) // Vibrant yellow
     static let accentRed = Color(red: 0.9, green: 0.3, blue: 0.3) // Vibrant red
     
-    // Dynamic gradient colors
-    static let gradientStart = Color(red: 0.5, green: 0.2, blue: 0.8) // Deep purple
-    static let gradientMid = Color(red: 0.2, green: 0.5, blue: 0.9) // Electric blue
-    static let gradientEnd = Color(red: 0.1, green: 0.7, blue: 0.7) // Cyan
+    // Light mode gradient colors - very subtle pink hints
+    static let gradientStart = Color(red: 0.995, green: 0.99, blue: 0.995) // Almost white with hint of pink
+    static let gradientMid = Color(red: 0.99, green: 0.985, blue: 0.99) // Very subtle pink
+    static let gradientEnd = Color(red: 0.992, green: 0.988, blue: 0.992) // Barely pink
     
     // Status-specific colors
     static let completedColor = Color(red: 0.2, green: 0.8, blue: 0.4) // Success green
@@ -46,36 +46,36 @@ extension Color {
     static let warningColor = Color(red: 0.9, green: 0.7, blue: 0.2) // Warning orange
     static let infoColor = Color(red: 0.3, green: 0.7, blue: 0.9) // Info blue
     
-    // Enhanced glass morphism backgrounds with color tints
-    static let cardBackground = Color.white.opacity(0.08)
-    static let hoverBackground = Color.white.opacity(0.12)
-    static let activeBackground = Color.white.opacity(0.16)
+    // Light mode glass morphism backgrounds
+    static let cardBackground = Color.black.opacity(0.04)
+    static let hoverBackground = Color.black.opacity(0.06)
+    static let activeBackground = Color.black.opacity(0.08)
     static let coloredCardBackground = LinearGradient(
         colors: [
-            Color.white.opacity(0.1),
-            Color.accent.opacity(0.1),
-            Color.accentSecondary.opacity(0.08)
+            Color.black.opacity(0.04),
+            Color.accent.opacity(0.08),
+            Color.accentSecondary.opacity(0.06)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
-    // Liquid glass primary background
-    static let primaryBackground = Color.white.opacity(0.05)
+    // Light mode primary background
+    static let primaryBackground = Color.black.opacity(0.02)
     
-    // Enhanced text colors with subtle tints
-    static let primaryText = Color.white
-    static let secondaryText = Color.white.opacity(0.85)
-    static let tertiaryText = Color.white.opacity(0.65)
-    static let accentText = Color(red: 0.7, green: 0.8, blue: 1.0) // Slightly blue-tinted text
+    // Light mode text colors
+    static let primaryText = Color.black
+    static let secondaryText = Color.black.opacity(0.7)
+    static let tertiaryText = Color.black.opacity(0.5)
+    static let accentText = Color(red: 0.3, green: 0.4, blue: 0.6) // Slightly blue-tinted text for light mode
     
-    // Colorful glass border colors
-    static let glassBorder = Color.white.opacity(0.2)
-    static let glassActiveBorder = Color.white.opacity(0.3)
+    // Light mode glass border colors
+    static let glassBorder = Color.black.opacity(0.1)
+    static let glassActiveBorder = Color.black.opacity(0.15)
     static let coloredGlassBorder = LinearGradient(
         colors: [
-            Color.accent.opacity(0.3),
-            Color.accentSecondary.opacity(0.2),
+            Color.accent.opacity(0.2),
+            Color.accentSecondary.opacity(0.15),
             Color.accentPurple.opacity(0.1)
         ],
         startPoint: .topLeading,
@@ -294,43 +294,43 @@ struct ContentView: View {
             }
         }
         .background(
-            // Vibrant dark gradient with subtle color hints
+            // Light mode background with very subtle pink hints
             ZStack {
-                // Base dark gradient
+                // Base light gradient - mostly white with extremely subtle pink
                 LinearGradient(
                     colors: [
-                        Color(red: 0.05, green: 0.05, blue: 0.08),   // Very dark with blue hint
-                        Color(red: 0.08, green: 0.06, blue: 0.10),   // Dark with purple hint
-                        Color(red: 0.06, green: 0.08, blue: 0.12),   // Medium dark with teal hint
-                        Color(red: 0.10, green: 0.08, blue: 0.15),   // Lighter dark with purple hint
-                        Color(red: 0.08, green: 0.10, blue: 0.10),   // Back to darker with teal
-                        Color(red: 0.06, green: 0.06, blue: 0.08),   // Very dark with blue
-                        Color(red: 0.02, green: 0.02, blue: 0.05)    // Almost black with hint
+                        Color.white,                                  // Pure white
+                        Color(red: 0.998, green: 0.995, blue: 0.998), // Barely pink
+                        Color(red: 0.995, green: 0.992, blue: 0.995), // Very subtle pink
+                        Color(red: 0.997, green: 0.994, blue: 0.997), // Almost white with pink hint
+                        Color(red: 0.996, green: 0.993, blue: 0.996), // Subtle pink
+                        Color(red: 0.999, green: 0.996, blue: 0.999), // Nearly white
+                        Color.white                                   // Pure white
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
                 
-                // Subtle colorful overlay
+                // Very subtle colorful overlay
                 LinearGradient(
                     colors: [
-                        Color.gradientStart.opacity(0.05),
-                        Color.gradientMid.opacity(0.03),
-                        Color.gradientEnd.opacity(0.04),
-                        Color.accentPurple.opacity(0.02),
-                        Color.accentPink.opacity(0.01)
+                        Color.gradientStart.opacity(0.3),
+                        Color.gradientMid.opacity(0.2),
+                        Color.gradientEnd.opacity(0.25),
+                        Color.accentPink.opacity(0.08),
+                        Color.accentPurple.opacity(0.05)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
                 .blendMode(.overlay)
                 
-                // Dynamic shimmer effect
+                // Subtle shimmer effect
                 LinearGradient(
                     colors: [
                         Color.clear,
-                        Color.accent.opacity(0.02),
-                        Color.accentSecondary.opacity(0.01),
+                        Color.accentPink.opacity(0.03),
+                        Color.accentPurple.opacity(0.02),
                         Color.clear
                     ],
                     startPoint: .topLeading,
@@ -340,7 +340,7 @@ struct ContentView: View {
             }
             .ignoresSafeArea(.all) // Extend into title bar area
         )
-        .preferredColorScheme(.dark) // Ensure dark mode for proper text contrast
+        .preferredColorScheme(.light) // Light mode for proper text contrast
         .onAppear {
             self.setupTaskCreationViewModel()
         }
@@ -483,7 +483,7 @@ struct FloatingSidebarView: View {
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(Color.secondaryText)
                         .frame(width: 32, height: 32)
-                        .background(Color.white.opacity(0.1))
+                        .background(Color.black.opacity(0.05))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -519,7 +519,7 @@ struct FloatingSidebarView: View {
             // Footer
             VStack(spacing: 12) {
                 Divider()
-                    .background(Color.white.opacity(0.2))
+                    .background(Color.black.opacity(0.08))
                 
                 // Settings button
                 Button(action: onSettings) {
@@ -539,7 +539,7 @@ struct FloatingSidebarView: View {
                     .padding(.vertical, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.white.opacity(0.05))
+                            .fill(Color.black.opacity(0.02))
                     )
                 }
                 .buttonStyle(.plain)
@@ -553,91 +553,22 @@ struct FloatingSidebarView: View {
         }
         .frame(width: 260)
         .background(
-            // Vibrant liquid glass sidebar - Enhanced glass morphism
-            ZStack {
-                // Main gradient base with color hints
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.08, green: 0.08, blue: 0.12).opacity(0.95),   // Dark with blue hint
-                        Color(red: 0.10, green: 0.08, blue: 0.15).opacity(0.9),   // Medium dark with purple hint
-                        Color(red: 0.06, green: 0.08, blue: 0.10).opacity(0.95)   // Very dark with teal hint
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                
-                // Multi-layer glass effect
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .opacity(0.4)
-                
-                Rectangle()
-                    .fill(.thickMaterial)
-                    .opacity(0.2)
-                
-                // Colorful liquid glass highlight
-                LinearGradient(
-                    colors: [
-                        Color.accent.opacity(0.15),
-                        Color.accentPurple.opacity(0.08),
-                        Color.accentSecondary.opacity(0.12),
-                        Color.accentPink.opacity(0.06),
-                        Color.clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .blendMode(.overlay)
-                
-                // Enhanced accent liquid effect
-                LinearGradient(
-                    colors: [
-                        Color.gradientStart.opacity(0.2),
-                        Color.gradientMid.opacity(0.1),
-                        Color.gradientEnd.opacity(0.15),
-                        Color.accentOrange.opacity(0.08)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .blendMode(.softLight)
-                
-                // Dynamic shimmer overlay
-                LinearGradient(
-                    colors: [
-                        Color.clear,
-                        Color.accentGreen.opacity(0.05),
-                        Color.accentYellow.opacity(0.03),
-                        Color.clear
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .blendMode(.screen)
-            }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
+            // Clean light mode sidebar background
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color.glassBorder, lineWidth: 1.5)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(
+                .fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.3),
-                            Color.clear,
-                            Color.white.opacity(0.1)
+                            Color.white.opacity(0.95),
+                            Color(red: 0.98, green: 0.98, blue: 0.99).opacity(0.9),
+                            Color(red: 0.97, green: 0.97, blue: 0.98).opacity(0.95)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
+                    )
                 )
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.3), radius: 30, x: 0, y: 15)
-        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+        .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
         .padding(.leading, 20)
         .padding(.vertical, 20)
     }
@@ -806,7 +737,7 @@ struct TodoListView: View {
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(Color.secondaryText)
                                 .frame(width: 36, height: 36)
-                                .background(Color.white.opacity(0.1))
+                                .background(Color.black.opacity(0.05))
                                 .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
@@ -1191,414 +1122,17 @@ struct TodoRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Professional checkbox with better hit area
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    onToggleComplete()
-                }
-            }) {
-                ZStack {
-                    // Larger invisible hit area
-                    Circle()
-                        .fill(Color.clear)
-                        .frame(width: 32, height: 32)
-                    
-                    // Visible checkbox
-                    Circle()
-                        .fill(todo.isCompleted ? Color.taskStatusColor(isCompleted: true) : Color.clear)
-                        .frame(width: 20, height: 20)
-                    
-                    Circle()
-                        .strokeBorder(
-                            todo.isCompleted ? Color.clear : Color.taskStatusColor(isCompleted: false).opacity(0.4),
-                            lineWidth: 1.5
-                        )
-                        .frame(width: 20, height: 20)
-                    
-                    if todo.isCompleted {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-            .buttonStyle(.borderless)
-            .contentShape(Circle())
+            checkboxView
             
-            // Clean title
-            if isEditing {
-                TextField("Task title", text: $editingTitle)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(Color.primaryText)
-                    .focused($isEditingFocused)
-                    .onSubmit {
-                        saveEdit()
-                    }
-                    .textFieldStyle(.plain)
-                    .background(Color.clear)
-                    .overlay(
-                        Rectangle()
-                            .stroke(Color.clear)
-                    )
-            } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) {
-                        Text(todo.title)
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(todo.isCompleted ? Color.tertiaryText : Color.primaryText)
-                            .strikethrough(todo.isCompleted, color: Color.tertiaryText)
-                            .onTapGesture(count: 2) {
-                                startEditing()
-                            }
-                            .contextMenu {
-                                Button("Edit") {
-                                    startEditing()
-                                }
-                                Divider()
-                                Button("Delete", role: .destructive) {
-                                    onDelete()
-                                }
-                            }
-                        
-                        // Info icon
-                        if hasAdditionalInfo {
-                            Button(action: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showingInfo.toggle()
-                                }
-                            }) {
-                                Image(systemName: "info.circle")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(showingInfo ? Color.infoColor : Color.secondaryText)
-                                    .opacity(isHovered ? 1.0 : 0.7)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Show additional information")
-                        }
-                        
-                        Spacer()
-                        
-                        // Processing indicator
-                        if todo.isProcessing {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .progressViewStyle(CircularProgressViewStyle(tint: Color.accent))
-                        }
-                        
-                        // Processing error indicator
-                        if let processingError = todo.processingError {
-                            Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.orange)
-                                .help(processingError)
-                        }
-                    }
-                    
-                    // Additional information (shown when info icon is clicked)
-                    if showingInfo {
-                        VStack(alignment: .leading, spacing: 6) {
-                            // Due date and time
-                            if let dueDate = todo.dueDate {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "calendar")
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accentOrange)
-                                    
-                                    Text("Due: \(dueDate, formatter: dateFormatter)")
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(Color.tertiaryText)
-                                }
-                            }
-                            
-                            if let dueTime = todo.dueTime {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "clock")
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accentYellow)
-                                    
-                                    Text("Time: \(dueTime, formatter: timeFormatter)")
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(Color.tertiaryText)
-                                }
-                            }
-                            
-                            // Recurring status
-                            if todo.isRecurring {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "repeat")
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accentPurple)
-                                    
-                                    Text("Recurring task")
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(Color.tertiaryText)
-                                }
-                            }
-                            
-                            // Schedule information
-                            if !todo.scheduleDescription.isEmpty {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "calendar.badge.clock")
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accentGreen)
-                                    
-                                    Text(todo.scheduleDescription)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(Color.tertiaryText)
-                                }
-                            }
-                            
-                            // Upcoming reminders for recurring tasks
-                            if !todo.upcomingReminders.isEmpty {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "bell")
-                                            .font(.system(size: 9, weight: .medium))
-                                            .foregroundColor(Color.accentPink)
-                                        
-                                        Text("Next reminders:")
-                                            .font(.system(size: 10, weight: .semibold))
-                                            .foregroundColor(Color.accentPink)
-                                    }
-                                    
-                                    ForEach(Array(todo.upcomingReminders.prefix(4).enumerated()), id: \.offset) { index, reminder in
-                                        HStack(spacing: 4) {
-                                            Circle()
-                                                .fill(Color.accentPink.opacity(0.6))
-                                                .frame(width: 3, height: 3)
-                                            
-                                            Text(reminder)
-                                                .font(.system(size: 9, weight: .medium))
-                                                .foregroundColor(Color.tertiaryText)
-                                        }
-                                        .padding(.leading, 16)
-                                    }
-                                }
-                            }
-                            
-                            // Notification status
-                            if hasScheduledNotifications {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "bell.badge")
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accentOrange)
-                                    
-                                    Text("Notifications scheduled")
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(Color.tertiaryText)
-                                }
-                            }
-                            
-                            // Original AI input (if available)
-                            if let originalInput = todo.originalInput, !originalInput.isEmpty, originalInput != todo.title {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "brain.head.profile")
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(Color.accentGreen)
-                                    
-                                    Text("From: \"\(originalInput)\"")
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(Color.accentGreen.opacity(0.7))
-                                        .italic()
-                                }
-                            }
-                        }
-                        .padding(.top, 4)
-                        .padding(.leading, 2)
-                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                    } else {
-                        // Show minimal info when collapsed
-                        if !todo.scheduleDescription.isEmpty || !todo.upcomingReminders.isEmpty {
-                            Text(todo.scheduleDescription.isEmpty ? "Has scheduled reminders" : todo.scheduleDescription)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(Color.tertiaryText)
-                                .lineLimit(1)
-                        }
-                    }
-                }
-            }
+            mainContentView
             
-            Spacer()
-            
-            // Edit, schedule, and delete buttons
-            if isHovered && !isEditing {
-                HStack(spacing: 8) {
-                    // Schedule button
-                    Button(action: {
-                        onSchedule()
-                    }) {
-                        Image(systemName: hasScheduledNotifications ? "bell.badge.fill" : "bell")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(hasScheduledNotifications ? Color.accentOrange : Color.accentYellow)
-                            .frame(width: 24, height: 24)
-                            .background(
-                                LinearGradient(
-                                    colors: [
-                                        (hasScheduledNotifications ? Color.accentOrange : Color.accentYellow).opacity(0.2),
-                                        (hasScheduledNotifications ? Color.accentOrange : Color.accentYellow).opacity(0.1)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // Edit button
-                    Button(action: {
-                        startEditing()
-                    }) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.accentPurple)
-                            .frame(width: 24, height: 24)
-                            .background(
-                                LinearGradient(
-                                    colors: [
-                                        Color.accentPurple.opacity(0.2),
-                                        Color.accentPurple.opacity(0.1)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // Delete button
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            onDelete()
-                        }
-                    }) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.urgentColor)
-                            .frame(width: 24, height: 24)
-                            .background(
-                                LinearGradient(
-                                    colors: [
-                                        Color.urgentColor.opacity(0.2),
-                                        Color.urgentColor.opacity(0.1)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .transition(.opacity)
+            if isHovered {
+                actionButtonsView
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(
-            ZStack {
-                // Advanced colorful liquid glass background
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(
-                        isFocused ? Color.activeBackground :
-                        (isHovered ? Color.hoverBackground : Color.cardBackground)
-                    )
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .opacity(0.8)
-                    )
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(.thickMaterial)
-                            .opacity(0.3)
-                    )
-                
-                // Colorful gradient overlay
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.dynamicAccent(for: todo.hashValue).opacity(0.05),
-                                Color.dynamicAccent(for: todo.hashValue + 1).opacity(0.03),
-                                Color.clear
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .blendMode(.overlay)
-                
-                // Colorful liquid glass border with animated glow
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(
-                        isFocused ? 
-                            LinearGradient(
-                                colors: [
-                                    Color.dynamicAccent(for: todo.hashValue).opacity(0.6),
-                                    Color.dynamicAccent(for: todo.hashValue + 1).opacity(0.4)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ) :
-                            LinearGradient(
-                                colors: [Color.glassBorder, Color.glassBorder],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                        lineWidth: isFocused ? 2 : 1
-                    )
-                    .opacity(isHovered ? 1.0 : 0.8)
-                
-                // Subtle inner glow for glass effect
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.dynamicAccent(for: todo.hashValue).opacity(0.3),
-                                Color.clear,
-                                Color.dynamicAccent(for: todo.hashValue + 1).opacity(0.1)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-                    .opacity(isHovered ? 0.8 : 0.5)
-                
-                // Enhanced liquid highlight effect
-                if isHovered {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.dynamicAccent(for: todo.hashValue).opacity(0.15),
-                                    Color.dynamicAccent(for: todo.hashValue + 1).opacity(0.08),
-                                    Color.dynamicAccent(for: todo.hashValue + 2).opacity(0.05),
-                                    Color.clear
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .blendMode(.overlay)
-                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                }
-            }
-            .shadow(
-                color: Color.black.opacity(isHovered ? 0.3 : 0.15), 
-                radius: isHovered ? 20 : 10, 
-                x: 0, 
-                y: isHovered ? 10 : 5
-            )
-            .shadow(
-                color: isFocused ? Color.dynamicAccent(for: todo.hashValue).opacity(0.3) : Color.clear,
-                radius: isFocused ? 15 : 0,
-                x: 0,
-                y: 0
-            )
-        )
+        .background(todoItemBackground)
         .scaleEffect(isHovered ? 1.02 : 1.0)
         .animation(.interactiveSpring(response: 0.4, dampingFraction: 0.8, blendDuration: 0.2), value: isHovered)
         .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.9, blendDuration: 0.15), value: isFocused)
@@ -1614,11 +1148,9 @@ struct TodoRowView: View {
             }
         }
         .task {
-            // Check if task has scheduled notifications
             await refreshNotificationStatus()
         }
         .onChange(of: todo.id) { oldValue, newValue in
-            // Refresh notification status when todo changes
             Task {
                 await refreshNotificationStatus()
             }
@@ -1626,6 +1158,287 @@ struct TodoRowView: View {
         .onChange(of: isEditing) { oldValue, newValue in
             onEditingChange(newValue)
         }
+    }
+    
+    private var checkboxView: some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                onToggleComplete()
+            }
+        }) {
+            ZStack {
+                // Larger invisible hit area
+                Circle()
+                    .fill(Color.clear)
+                    .frame(width: 32, height: 32)
+                
+                // Visible checkbox
+                Circle()
+                    .fill(todo.isCompleted ? Color.taskStatusColor(isCompleted: true) : Color.clear)
+                    .frame(width: 20, height: 20)
+                
+                Circle()
+                    .strokeBorder(
+                        todo.isCompleted ? Color.clear : Color.taskStatusColor(isCompleted: false).opacity(0.4),
+                        lineWidth: 1.5
+                    )
+                    .frame(width: 20, height: 20)
+                
+                if todo.isCompleted {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .buttonStyle(.borderless)
+        .contentShape(Circle())
+    }
+    
+    private var mainContentView: some View {
+        VStack(spacing: 0) {
+            if isEditing {
+                editingView
+            } else {
+                titleView
+            }
+            
+            if showingInfo && hasAdditionalInfo {
+                additionalInfoView
+            }
+        }
+    }
+    
+    private var editingView: some View {
+        TextField("Task title", text: $editingTitle)
+            .font(.system(size: 15, weight: .medium))
+            .foregroundColor(Color.primaryText)
+            .focused($isEditingFocused)
+            .onSubmit {
+                saveEdit()
+            }
+            .textFieldStyle(.plain)
+            .background(Color.clear)
+            .overlay(
+                Rectangle()
+                    .stroke(Color.clear)
+            )
+    }
+    
+    private var titleView: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Text(todo.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(todo.isCompleted ? Color.tertiaryText : Color.primaryText)
+                    .strikethrough(todo.isCompleted, color: Color.tertiaryText)
+                    .onTapGesture(count: 2) {
+                        startEditing()
+                    }
+                    .contextMenu {
+                        Button("Edit") {
+                            startEditing()
+                        }
+                        Divider()
+                        Button("Delete", role: .destructive) {
+                            onDelete()
+                        }
+                    }
+                
+                // Info icon
+                if hasAdditionalInfo {
+                    infoButtonView
+                }
+                
+                Spacer()
+                
+                // Processing indicator
+                if todo.isProcessing {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .progressViewStyle(CircularProgressViewStyle(tint: Color.accent))
+                }
+                
+                // Processing error indicator
+                if let processingError = todo.processingError {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.orange)
+                        .help(processingError)
+                }
+            }
+            
+            // Due date/time display
+            if let dueDate = todo.dueDate {
+                dueDateView(dueDate)
+            }
+        }
+    }
+    
+    private var infoButtonView: some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showingInfo.toggle()
+            }
+        }) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Color.secondaryText)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func dueDateView(_ dueDate: Date) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "calendar")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(Color.tertiaryText)
+            
+            Text(dateFormatter.string(from: dueDate))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Color.tertiaryText)
+            
+            if let dueTime = todo.dueTime {
+                Text("•")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(Color.tertiaryText)
+                
+                Text(timeFormatter.string(from: dueTime))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color.tertiaryText)
+            }
+        }
+    }
+    
+    private var additionalInfoView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let originalInput = todo.originalInput, !originalInput.isEmpty && originalInput != todo.title {
+                HStack {
+                    Text("Original:")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color.tertiaryText)
+                    
+                    Text(originalInput)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color.tertiaryText)
+                        .italic()
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(Color.tertiaryText.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
+            if !todo.scheduleDescription.isEmpty {
+                HStack {
+                    Text("Schedule:")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color.tertiaryText)
+                    
+                    Text(todo.scheduleDescription)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color.tertiaryText)
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(Color.tertiaryText.opacity(0.1))
+                .cornerRadius(8)
+            }
+        }
+        .padding(.top, 8)
+    }
+    
+    private var actionButtonsView: some View {
+        HStack(spacing: 8) {
+            // Schedule button
+            Button(action: {
+                onSchedule()
+            }) {
+                Image(systemName: hasScheduledNotifications ? "bell.badge.fill" : "bell")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(hasScheduledNotifications ? Color.accentOrange : Color.accentYellow)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                (hasScheduledNotifications ? Color.accentOrange : Color.accentYellow).opacity(0.2),
+                                (hasScheduledNotifications ? Color.accentOrange : Color.accentYellow).opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            
+            // Edit button
+            Button(action: {
+                startEditing()
+            }) {
+                Image(systemName: "pencil")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color.accentPurple)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                Color.accentPurple.opacity(0.2),
+                                Color.accentPurple.opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            
+            // Delete button
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    onDelete()
+                }
+            }) {
+                Image(systemName: "trash")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color.urgentColor)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                Color.urgentColor.opacity(0.2),
+                                Color.urgentColor.opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .transition(.opacity)
+    }
+    
+    private var todoItemBackground: some View {
+        // Clean light mode todo item background
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(
+                isFocused ? Color.white.opacity(0.95) :
+                (isHovered ? Color.white.opacity(0.8) : Color.white.opacity(0.6))
+            )
+            .stroke(
+                isFocused ? Color.dynamicAccent(for: todo.hashValue).opacity(0.3) :
+                (isHovered ? Color.black.opacity(0.1) : Color.black.opacity(0.06)),
+                lineWidth: isFocused ? 2 : 1
+            )
+            .shadow(
+                color: isFocused ? Color.dynamicAccent(for: todo.hashValue).opacity(0.1) : Color.black.opacity(0.05),
+                radius: isFocused ? 8 : 4,
+                x: 0,
+                y: 2
+            )
     }
     
     private func startEditing() {
@@ -1722,7 +1535,7 @@ struct DayGroupView: View {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(isDropTargeted ? Color.accent.opacity(0.2) : Color.clear)
                         .stroke(
-                            isDropTargeted ? Color.accent : Color.white.opacity(0.1),
+                            isDropTargeted ? Color.accent : Color.black.opacity(0.1),
                             style: StrokeStyle(lineWidth: 2, dash: isDropTargeted ? [] : [8, 4])
                         )
                         .frame(height: 60)
