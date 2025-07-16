@@ -72,7 +72,7 @@ final class TaskCreationViewModel: ObservableObject {
         // Use word boundaries to avoid false positives
         // e.g., "category" shouldn't match "at" 
         for keyword in schedulingKeywords {
-            let pattern = "\\b\\(NSRegularExpression.escapedPattern(for: keyword))\\b"
+            let pattern = "\\b\(NSRegularExpression.escapedPattern(for: keyword))\\b"
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
                 let range = NSRange(location: 0, length: lowercased.count)
                 if regex.firstMatch(in: lowercased, options: [], range: range) != nil {
