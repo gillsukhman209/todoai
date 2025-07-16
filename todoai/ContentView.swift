@@ -110,6 +110,7 @@ struct ContentView: View {
     @State private var taskCreationViewModel: TaskCreationViewModel?
     @State private var selectedView: TodoViewType = .calendar
     @State private var focusInputTrigger = false
+    @State private var selectedDate = Date()
     
     init() {
         // Initialize the state as nil - will be properly set up in onAppear
@@ -208,7 +209,8 @@ struct ContentView: View {
                 onCompleteCleanup: completeCleanup,
                 showSidebar: $showSidebar,
                 onFocusInput: focusTaskInput,
-                onAddTaskForDay: createTaskForDay
+                onAddTaskForDay: createTaskForDay,
+                selectedDate: $selectedDate
             )
             .padding(.leading, showSidebar ? 280 : 0)
             .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showSidebar)
@@ -244,7 +246,8 @@ struct ContentView: View {
                         Spacer()
                         FloatingTaskInputContainer(
                             viewModel: viewModel,
-                            focusTrigger: focusInputTrigger
+                            focusTrigger: focusInputTrigger,
+                            selectedDate: selectedDate
                         )
                         Spacer()
                     }
@@ -695,6 +698,7 @@ struct TodoListView: View {
     @Binding var showSidebar: Bool
     let onFocusInput: () -> Void
     let onAddTaskForDay: (Date) -> Void
+    @Binding var selectedDate: Date
     @FocusState private var isMainViewFocused: Bool
     @State private var focusedTodoID: UUID?
     @State private var editingTodoID: UUID?
@@ -788,7 +792,8 @@ struct TodoListView: View {
                             onDeleteTodo: onDeleteTodo,
                             onScheduleTodo: onScheduleTodo,
                             onMoveTodo: onMoveTodo,
-                            onAddTaskForDay: onAddTaskForDay
+                            onAddTaskForDay: onAddTaskForDay,
+                            selectedDate: $selectedDate
                         )
                     } else if selectedView == .upcoming {
                         // Upcoming view - grouped by day
@@ -1880,8 +1885,8 @@ struct CalendarView: View {
     let onScheduleTodo: (Todo) -> Void
     let onMoveTodo: (Todo, Date) -> Void
     let onAddTaskForDay: (Date) -> Void
+    @Binding var selectedDate: Date
     
-    @State private var selectedDate = Date()
     @State private var currentMonth = Date()
     @State private var selectedDayTodos: [Todo] = []
     
