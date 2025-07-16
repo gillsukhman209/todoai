@@ -337,6 +337,9 @@ struct ContentView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .focusTaskInput)) { _ in
+            focusTaskInput()
+        }
     }
     
     private func setupTaskCreationViewModel() {

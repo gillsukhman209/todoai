@@ -14,15 +14,11 @@ struct FloatingTaskInput: View {
     @ObservedObject var viewModel: TaskCreationViewModel
     let focusTrigger: Bool
     @FocusState private var isInputFocused: Bool
-    @State private var showingExamples = false
+
     
     var body: some View {
         VStack(spacing: 8) {
-            // Examples tooltip (shows when input is focused and empty)
-            if showingExamples && viewModel.input.isEmpty && isInputFocused {
-                ExampleTooltip()
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            }
+
             
             // Main input container
             HStack(spacing: 12) {
@@ -67,11 +63,6 @@ struct FloatingTaskInput: View {
         .frame(maxWidth: 600) // Limit width like ChatGPT
         .padding(.horizontal, 24)
         .padding(.bottom, 24)
-                 .onChange(of: isInputFocused) { oldValue, newValue in
-             withAnimation(.easeInOut(duration: 0.2)) {
-                 showingExamples = newValue
-             }
-         }
          .onChange(of: focusTrigger) { oldValue, newValue in
              isInputFocused = true
          }
@@ -219,141 +210,7 @@ struct FloatingTaskInput: View {
     }
 }
 
-// MARK: - Example Tooltip
-struct ExampleTooltip: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Try these examples:")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(Color.primaryText)
-            
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 8) {
-                ExampleCard(
-                    icon: "phone",
-                    text: "call dad at 6am",
-                    color: .blue
-                )
-                
-                ExampleCard(
-                    icon: "creditcard",
-                    text: "pay PGE every Friday at 10am",
-                    color: .green
-                )
-                
-                ExampleCard(
-                    icon: "figure.strengthtraining.traditional",
-                    text: "workout every Mon, Wed, Fri at 7pm",
-                    color: .orange
-                )
-                
-                ExampleCard(
-                    icon: "drop.fill",
-                    text: "drink water every 30 minutes from 9am to 5pm",
-                    color: .cyan
-                )
-            }
-        }
-        .padding(16)
-        .background(
-            ZStack {
-                // Liquid glass base
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.cardBackground)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .opacity(0.8)
-                    )
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(.thickMaterial)
-                            .opacity(0.3)
-                    )
-                
-                // Liquid glass border
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.glassBorder, lineWidth: 1)
-                
-                // Inner glass highlight
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.3),
-                                Color.clear,
-                                Color.white.opacity(0.1)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-                    .opacity(0.6)
-            }
-        )
-        .shadow(color: Color.black.opacity(0.2), radius: 15, x: 0, y: 6)
-        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
-    }
-}
 
-struct ExampleCard: View {
-    let icon: String
-    let text: String
-    let color: Color
-    
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(color)
-                .frame(width: 14)
-            
-            Text(text)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(Color.secondaryText)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-            
-            Spacer()
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(
-            ZStack {
-                // Liquid glass base
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.05))
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .opacity(0.3)
-                    )
-                
-                // Liquid glass border
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
-                
-                // Inner glass highlight
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.2),
-                                Color.clear
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.5
-                    )
-                    .opacity(0.6)
-            }
-        )
-    }
-}
 
 // MARK: - Preview
 #Preview {
