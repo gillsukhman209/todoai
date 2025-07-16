@@ -1892,14 +1892,35 @@ struct CalendarView: View {
     
     private let calendar = Calendar.current
     
-    // Get all days in the current month
-    private var monthDays: [Date] {
-        let range = calendar.range(of: .day, in: .month, for: currentMonth)!
+    // Get weeks for the current month (limit to 5 weeks for better visibility)
+    private var weekDays: [[Date]] {
         let startOfMonth = calendar.dateInterval(of: .month, for: currentMonth)!.start
+        let endOfMonth = calendar.dateInterval(of: .month, for: currentMonth)!.end
         
-        return range.compactMap { day in
-            calendar.date(byAdding: .day, value: day - 1, to: startOfMonth)
+        // Get the first day of the week that contains the first day of the month
+        let firstWeekday = calendar.dateComponents([.weekday], from: startOfMonth).weekday! - 1
+        let startOfWeek = calendar.date(byAdding: .day, value: -firstWeekday, to: startOfMonth)!
+        
+        var weeks: [[Date]] = []
+        var currentWeekStart = startOfWeek
+        
+        // Generate 5 weeks maximum for better layout
+        for _ in 0..<5 {
+            var week: [Date] = []
+            for dayOffset in 0..<7 {
+                let date = calendar.date(byAdding: .day, value: dayOffset, to: currentWeekStart)!
+                week.append(date)
+            }
+            weeks.append(week)
+            currentWeekStart = calendar.date(byAdding: .day, value: 7, to: currentWeekStart)!
+            
+            // Stop if we've covered the whole month
+            if currentWeekStart > endOfMonth {
+                break
+            }
         }
+        
+        return weeks
     }
     
     // Get todos for a specific date
@@ -1910,14 +1931,9 @@ struct CalendarView: View {
         }.sorted { $0.sortOrder < $1.sortOrder }
     }
     
-    // Get the first day of the month to calculate offset
-    private var firstDayOfMonth: Date {
-        calendar.dateInterval(of: .month, for: currentMonth)!.start
-    }
-    
-    // Get the weekday of the first day (0 = Sunday, 1 = Monday, etc.)
-    private var firstDayWeekday: Int {
-        calendar.component(.weekday, from: firstDayOfMonth) - 1
+    // Check if date is in current month
+    private func isInCurrentMonth(_ date: Date) -> Bool {
+        calendar.isDate(date, equalTo: currentMonth, toGranularity: .month)
     }
     
     var body: some View {
@@ -1947,11 +1963,6 @@ struct CalendarView: View {
                     .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
             )
             .padding(.horizontal, 32)
-            
-            // Selected Day Tasks Section
-            if !selectedDayTodos.isEmpty {
-                selectedDayTasksSection
-            }
         }
         .onAppear {
             selectedDayTodos = todosForDate(selectedDate)
@@ -2033,7 +2044,7 @@ struct CalendarView: View {
     }
     
     private var weekdayHeaders: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 1) {
             ForEach(calendar.weekdaySymbols, id: \.self) { weekday in
                 Text(String(weekday.prefix(3)))
                     .font(.system(size: 12, weight: .semibold))
@@ -2052,110 +2063,73 @@ struct CalendarView: View {
     }
     
     private var calendarGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 1), count: 7), spacing: 1) {
-            // Empty cells for days before month starts
-            ForEach(0..<firstDayWeekday, id: \.self) { _ in
-                Rectangle()
-                    .fill(Color.clear)
-                    .frame(height: 70)
-            }
-            
-            // Days of the month
-            ForEach(monthDays, id: \.self) { date in
-                CalendarDayView(
-                    date: date,
-                    todos: todosForDate(date),
-                    isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
-                    isToday: calendar.isDate(date, inSameDayAs: Date()),
-                    onTap: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedDate = date
-                            selectedDayTodos = todosForDate(date)
-                        }
-                    },
-                    onAddTask: { onAddTaskForDay(date) }
-                )
+        VStack(spacing: 1) {
+            ForEach(Array(weekDays.enumerated()), id: \.offset) { weekIndex, week in
+                HStack(spacing: 1) {
+                    ForEach(week, id: \.self) { date in
+                        NotionStyleDayView(
+                            date: date,
+                            todos: todosForDate(date),
+                            isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
+                            isToday: calendar.isDate(date, inSameDayAs: Date()),
+                            isInCurrentMonth: isInCurrentMonth(date),
+                            onTap: {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    selectedDate = date
+                                    selectedDayTodos = todosForDate(date)
+                                }
+                            },
+                            onAddTask: { onAddTaskForDay(date) },
+                            onToggleComplete: onToggleComplete,
+                            onDeleteTodo: onDeleteTodo,
+                            onScheduleTodo: onScheduleTodo,
+                            onMoveTodo: onMoveTodo
+                        )
+                    }
+                }
             }
         }
         .background(Color.white.opacity(0.1))
     }
-    
-    private var selectedDayTasksSection: some View {
-        VStack(spacing: 16) {
-            // Section header
-            HStack {
-                Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(Color.primaryText)
-                
-                Spacer()
-                
-                Text("\(selectedDayTodos.count) task\(selectedDayTodos.count == 1 ? "" : "s")")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color.secondaryText)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.black.opacity(0.05))
-                    .clipShape(Capsule())
-            }
-            .padding(.horizontal, 32)
-            
-            // Tasks list
-            VStack(spacing: 8) {
-                ForEach(selectedDayTodos) { todo in
-                    TodoRowView(
-                        todo: todo,
-                        onToggleComplete: { onToggleComplete(todo) },
-                        onDelete: { onDeleteTodo(todo) },
-                        onSchedule: { onScheduleTodo(todo) },
-                        isFocused: false,
-                        onFocus: { },
-                        isEditingTriggered: false,
-                        onEditingChange: { _ in }
-                    )
-                    .padding(.horizontal, 32)
-                }
-            }
-        }
-        .padding(.top, 24)
-        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-    }
 }
 
-// MARK: - Calendar Day View
-struct CalendarDayView: View {
+// MARK: - Notion Style Day View
+struct NotionStyleDayView: View {
     let date: Date
     let todos: [Todo]
     let isSelected: Bool
     let isToday: Bool
+    let isInCurrentMonth: Bool
     let onTap: () -> Void
     let onAddTask: () -> Void
+    let onToggleComplete: (Todo) -> Void
+    let onDeleteTodo: (Todo) -> Void
+    let onScheduleTodo: (Todo) -> Void
+    let onMoveTodo: (Todo, Date) -> Void
     
     @State private var isHovered = false
+    @State private var isDragTargeted = false
     
     private let calendar = Calendar.current
     
     var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 8) {
-                // Day number with better styling
+        VStack(alignment: .leading, spacing: 0) {
+            // Day number header
+            HStack {
                 Text("\(calendar.component(.day, from: date))")
-                    .font(.system(size: 16, weight: isToday ? .bold : .semibold))
+                    .font(.system(size: 14, weight: isToday ? .bold : .medium))
                     .foregroundColor(dayNumberColor)
-                    .frame(minWidth: 24)
-                
-                // Enhanced todo indicators
-                todoIndicators
+                    .opacity(isInCurrentMonth ? 1.0 : 0.3)
                 
                 Spacer()
                 
-                // Add button on hover (more subtle)
-                if isHovered && !isSelected {
+                // Add button on hover
+                if isHovered && isInCurrentMonth {
                     Button(action: onAddTask) {
                         Image(systemName: "plus")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(.white)
-                            .frame(width: 18, height: 18)
+                            .frame(width: 16, height: 16)
                             .background(Color.accentGreen)
                             .clipShape(Circle())
                     }
@@ -2163,15 +2137,65 @@ struct CalendarDayView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
-            .frame(height: 70)
-            .frame(maxWidth: .infinity)
-            .background(dayBackground)
-            .overlay(dayBorder)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+            
+            // Tasks area
+            ScrollView {
+                LazyVStack(spacing: 3) {
+                    ForEach(Array(todos.prefix(4).enumerated()), id: \.element.id) { index, todo in
+                        NotionStyleTaskView(
+                            todo: todo,
+                            color: Color.dynamicAccent(for: todo.hashValue),
+                            onToggleComplete: { onToggleComplete(todo) },
+                            onDelete: { onDeleteTodo(todo) },
+                            onSchedule: { onScheduleTodo(todo) }
+                        )
+                    }
+                    
+                    // Show overflow indicator if more than 4 tasks
+                    if todos.count > 4 {
+                        HStack {
+                            Text("+\(todos.count - 4) more")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(Color.tertiaryText)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                    }
+                }
+                .padding(.horizontal, 6)
+            }
+            .frame(maxHeight: .infinity)
+            
+            Spacer()
         }
-        .buttonStyle(.plain)
+        .frame(height: 140) // Much taller like Notion
+        .frame(maxWidth: .infinity)
+        .background(dayBackground)
+        .overlay(dayBorder)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isInCurrentMonth {
+                onTap()
+            }
+        }
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.2)) {
                 isHovered = hovering
+            }
+        }
+        .dropDestination(for: Todo.self) { droppedTodos, location in
+            // Handle dropping todos into this day
+            for todo in droppedTodos {
+                onMoveTodo(todo, date)
+            }
+            return true
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isDragTargeted = targeted
             }
         }
     }
@@ -2179,44 +2203,11 @@ struct CalendarDayView: View {
     // MARK: - Computed Properties
     
     private var dayNumberColor: Color {
-        if isSelected {
-            return .white
-        } else if isToday {
+        if isToday {
             return Color.accentOrange
         } else {
             return Color.primaryText
         }
-    }
-    
-    private var todoIndicators: some View {
-        VStack(spacing: 4) {
-            if todos.isEmpty {
-                // Empty state
-                Circle()
-                    .fill(Color.clear)
-                    .frame(width: 6, height: 6)
-            } else {
-                // Show up to 3 todo indicators
-                HStack(spacing: 2) {
-                    ForEach(Array(todos.prefix(3).enumerated()), id: \.offset) { index, todo in
-                        Circle()
-                            .fill(Color.dynamicAccent(for: todo.hashValue))
-                            .frame(width: 6, height: 6)
-                            .opacity(todo.isCompleted ? 0.5 : 1.0)
-                    }
-                    
-                    // Show count if more than 3
-                    if todos.count > 3 {
-                        Text("+\(todos.count - 3)")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(Color.tertiaryText)
-                            .padding(.horizontal, 2)
-                    }
-                }
-                .frame(height: 6)
-            }
-        }
-        .frame(height: 12)
     }
     
     private var dayBackground: some View {
@@ -2225,12 +2216,12 @@ struct CalendarDayView: View {
     }
     
     private var backgroundFill: Color {
-        if isSelected {
-            return Color.accent.opacity(0.8)
+        if isDragTargeted {
+            return Color.accentGreen.opacity(0.2)
         } else if isToday {
             return Color.accentOrange.opacity(0.15)
-        } else if isHovered {
-            return Color.white.opacity(0.6)
+        } else if isHovered && isInCurrentMonth {
+            return Color.accent.opacity(0.1) // Subtle blue hover effect
         } else {
             return Color.white.opacity(0.1)
         }
@@ -2242,8 +2233,8 @@ struct CalendarDayView: View {
     }
     
     private var borderColor: Color {
-        if isSelected {
-            return Color.accent.opacity(0.3)
+        if isDragTargeted {
+            return Color.accentGreen.opacity(0.6)
         } else if isToday {
             return Color.accentOrange.opacity(0.4)
         } else {
@@ -2252,7 +2243,91 @@ struct CalendarDayView: View {
     }
     
     private var borderWidth: CGFloat {
-        return isSelected ? 2 : 0.5
+        if isDragTargeted {
+            return 2
+        } else {
+            return 0.5
+        }
+    }
+}
+
+// MARK: - Notion Style Task View
+struct NotionStyleTaskView: View {
+    let todo: Todo
+    let color: Color
+    let onToggleComplete: () -> Void
+    let onDelete: () -> Void
+    let onSchedule: () -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            // Task text
+            Text(todo.title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(todo.isCompleted ? Color.secondaryText : Color.primaryText)
+                .strikethrough(todo.isCompleted)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            
+            Spacer()
+            
+            // Completion indicator
+            if isHovered {
+                Button(action: onToggleComplete) {
+                    Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 12))
+                        .foregroundColor(todo.isCompleted ? Color.completedColor : Color.secondaryText)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(color.opacity(todo.isCompleted ? 0.1 : 0.15))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(color.opacity(todo.isCompleted ? 0.2 : 0.3), lineWidth: 1)
+                )
+        )
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+        .draggable(todo) {
+            // Drag preview
+            HStack {
+                Text(todo.title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Color.primaryText)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(color.opacity(0.2))
+                    )
+            }
+        }
+        .contextMenu {
+            Button(action: onToggleComplete) {
+                Label(todo.isCompleted ? "Mark Incomplete" : "Mark Complete", 
+                      systemImage: todo.isCompleted ? "circle" : "checkmark.circle")
+            }
+            
+            Button(action: onSchedule) {
+                Label("Schedule", systemImage: "calendar")
+            }
+            
+            Divider()
+            
+            Button(action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 }
 
