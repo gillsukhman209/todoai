@@ -114,9 +114,9 @@ enum LayoutDensity {
     
     var calendarDayHeight: CGFloat {
         switch self {
-        case .compact: return 100
-        case .comfortable: return 120
-        case .spacious: return 140
+        case .compact: return 140
+        case .comfortable: return 180
+        case .spacious: return 220
         }
     }
 }
@@ -2094,7 +2094,7 @@ struct CalendarView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
             )
-            .padding(.horizontal, 32)
+            .padding(.horizontal, 48)
         }
         .onAppear {
             selectedDayTodos = todosForDate(selectedDate)
@@ -2115,9 +2115,9 @@ struct CalendarView: View {
                 }
             }) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.white)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 48, height: 48)
                     .background(
                         LinearGradient(
                             colors: [Color.accentPurple, Color.accentPink],
@@ -2126,7 +2126,7 @@ struct CalendarView: View {
                         )
                     )
                     .clipShape(Circle())
-                    .shadow(color: Color.accentPurple.opacity(0.3), radius: 4, x: 0, y: 2)
+                    .shadow(color: Color.accentPurple.opacity(0.4), radius: 8, x: 0, y: 4)
             }
             .buttonStyle(.plain)
             .scaleEffect(1.0)
@@ -2137,13 +2137,13 @@ struct CalendarView: View {
             Spacer()
             
             // Month and year display
-            VStack(spacing: 2) {
+            VStack(spacing: 4) {
                 Text(currentMonth.formatted(.dateTime.month(.wide)))
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 32, weight: .bold))
                     .foregroundColor(Color.primaryText)
                 
                 Text(currentMonth.formatted(.dateTime.year()))
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundColor(Color.secondaryText)
             }
             
@@ -2156,9 +2156,9 @@ struct CalendarView: View {
                 }
             }) {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.white)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 48, height: 48)
                     .background(
                         LinearGradient(
                             colors: [Color.accentPurple, Color.accentPink],
@@ -2167,37 +2167,37 @@ struct CalendarView: View {
                         )
                     )
                     .clipShape(Circle())
-                    .shadow(color: Color.accentPurple.opacity(0.3), radius: 4, x: 0, y: 2)
+                    .shadow(color: Color.accentPurple.opacity(0.4), radius: 8, x: 0, y: 4)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 32)
-        .padding(.bottom, 24)
+        .padding(.horizontal, 40)
+        .padding(.bottom, 32)
     }
     
     private var weekdayHeaders: some View {
         HStack(spacing: 1) {
             ForEach(calendar.weekdaySymbols, id: \.self) { weekday in
                 Text(String(weekday.prefix(3)))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color.secondaryText)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(Color.primaryText)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 44)
+                    .frame(height: 52)
             }
         }
-        .background(Color.white.opacity(0.2))
+        .background(Color.white.opacity(0.3))
         .overlay(
             Rectangle()
-                .fill(Color.black.opacity(0.06))
+                .fill(Color.black.opacity(0.08))
                 .frame(height: 1),
             alignment: .bottom
         )
     }
     
     private var calendarGrid: some View {
-        VStack(spacing: 1) {
+        VStack(spacing: 2) {
             ForEach(Array(weekDays.enumerated()), id: \.offset) { weekIndex, week in
-                HStack(spacing: 1) {
+                HStack(spacing: 2) {
                     ForEach(week, id: \.self) { date in
                         NotionStyleDayView(
                             date: date,
@@ -2252,7 +2252,8 @@ struct NotionStyleDayView: View {
             // Day number header
             HStack {
                 Text("\(calendar.component(.day, from: date))")
-                    .font(isToday ? .bodySmall : .labelLarge)
+                    .font(isToday ? .bodyMedium : .bodySmall)
+                    .fontWeight(isToday ? .bold : .semibold)
                     .foregroundColor(dayNumberColor)
                     .opacity(isInCurrentMonth ? 1.0 : 0.3)
                 
@@ -2262,9 +2263,9 @@ struct NotionStyleDayView: View {
                 if isHovered && isInCurrentMonth {
                     Button(action: onAddTask) {
                         Image(systemName: "plus")
-                            .font(.captionLarge)
+                            .font(.labelSmall)
                             .foregroundColor(.white)
-                            .frame(width: 16, height: 16)
+                            .frame(width: 20, height: 20)
                             .background(Color.accentGreen)
                             .clipShape(Circle())
                     }
@@ -2272,14 +2273,14 @@ struct NotionStyleDayView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
-            .padding(.horizontal, .spacingSm)
-            .padding(.top, .spacingSm)
-            .padding(.bottom, .spacingXs)
+            .padding(.horizontal, .spacingMd)
+            .padding(.top, .spacingMd)
+            .padding(.bottom, .spacingSm)
             
             // Tasks area
             ScrollView {
-                LazyVStack(spacing: .spacingXs) {
-                    let tasksToShow = showAllTasks ? todos : Array(todos.prefix(4))
+                LazyVStack(spacing: .spacingSm) {
+                    let tasksToShow = showAllTasks ? todos : Array(todos.prefix(6))
                     
                     ForEach(Array(tasksToShow.enumerated()), id: \.element.id) { index, todo in
                         NotionStyleTaskView(
@@ -2291,27 +2292,27 @@ struct NotionStyleDayView: View {
                         )
                     }
                     
-                    // Show overflow indicator if more than 4 tasks and not showing all
-                    if todos.count > 4 && !showAllTasks {
+                    // Show overflow indicator if more than 6 tasks and not showing all
+                    if todos.count > 6 && !showAllTasks {
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 showAllTasks = true
                             }
                         }) {
                             HStack {
-                                Text("+\(todos.count - 4) more")
-                                    .font(.captionLarge)
+                                Text("+\(todos.count - 6) more")
+                                    .font(.labelSmall)
                                     .foregroundColor(Color.accentSecondary)
                                 Spacer()
                             }
-                            .padding(.horizontal, .spacingSm)
-                            .padding(.vertical, .spacingXs / 2)
+                            .padding(.horizontal, .spacingMd)
+                            .padding(.vertical, .spacingXs)
                         }
                         .buttonStyle(.plain)
                     }
                     
                     // Show collapse button if showing all tasks
-                    if showAllTasks && todos.count > 4 {
+                    if showAllTasks && todos.count > 6 {
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 showAllTasks = false
@@ -2319,17 +2320,17 @@ struct NotionStyleDayView: View {
                         }) {
                             HStack {
                                 Text("Show less")
-                                    .font(.captionLarge)
+                                    .font(.labelSmall)
                                     .foregroundColor(Color.accentSecondary)
                                 Spacer()
                             }
-                            .padding(.horizontal, .spacingSm)
-                            .padding(.vertical, .spacingXs / 2)
+                            .padding(.horizontal, .spacingMd)
+                            .padding(.vertical, .spacingXs)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, .spacingXs + 2)
+                .padding(.horizontal, .spacingMd)
             }
             .frame(maxHeight: .infinity)
             
@@ -2428,10 +2429,11 @@ struct NotionStyleTaskView: View {
     @State private var isHovered = false
     
     var body: some View {
-        HStack(spacing: .spacingXs + 2) {
+        HStack(spacing: .spacingSm) {
             // Task text
             Text(todo.title)
-                .font(.labelSmall)
+                .font(.labelMedium)
+                .fontWeight(.medium)
                 .foregroundColor(todo.isCompleted ? Color.secondaryText : Color.primaryText)
                 .strikethrough(todo.isCompleted)
                 .lineLimit(2)
@@ -2449,13 +2451,13 @@ struct NotionStyleTaskView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, .spacingSm)
-        .padding(.vertical, .spacingXs)
+        .padding(.horizontal, .spacingMd)
+        .padding(.vertical, .spacingSm)
         .background(
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(color.opacity(todo.isCompleted ? 0.1 : 0.15))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .strokeBorder(color.opacity(todo.isCompleted ? 0.2 : 0.3), lineWidth: 1)
                 )
         )
