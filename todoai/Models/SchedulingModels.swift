@@ -419,6 +419,8 @@ struct ParsedTaskData: Codable, Equatable {
     let timeRangeEnd: String? // "5:00 PM"
     let monthlyDay: Int? // 1, 15, etc.
     let description: String? // Additional context from AI
+    let priority: String? // "low", "medium", "high"
+    let category: String? // "work", "personal", "shopping", "health", "other"
 }
 
 // MARK: - Extensions for Date Formatting

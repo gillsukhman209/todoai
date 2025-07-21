@@ -79,6 +79,44 @@ enum TaskPriority: String, Codable, CaseIterable {
         case .urgent: return 3
         }
     }
+    
+    var color: String {
+        switch self {
+        case .low: return "gray"
+        case .medium: return "blue"
+        case .high: return "red"
+        case .urgent: return "red"
+        }
+    }
+}
+
+// MARK: - Task Category
+enum TaskCategory: String, Codable, CaseIterable {
+    case work = "work"
+    case personal = "personal"
+    case shopping = "shopping"
+    case health = "health"
+    case other = "other"
+    
+    var displayName: String {
+        switch self {
+        case .work: return "Work"
+        case .personal: return "Personal"
+        case .shopping: return "Shopping"
+        case .health: return "Health"
+        case .other: return "Other"
+        }
+    }
+    
+    var systemImage: String {
+        switch self {
+        case .work: return "briefcase"
+        case .personal: return "person"
+        case .shopping: return "cart"
+        case .health: return "heart"
+        case .other: return ""
+        }
+    }
 }
 
 // MARK: - Task Status

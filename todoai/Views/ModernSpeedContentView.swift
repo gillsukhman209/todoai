@@ -8,6 +8,7 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 #if canImport(UIKit)
 import UIKit
@@ -713,24 +714,37 @@ struct ModernSpeedContentView: View {
     private func shouldTodoAppearOnDate(_ todo: Todo, date: Date) -> Bool {
         let calendar = Calendar.current
         
-        // First check if it's a regular todo with explicit due date
+        // First check basic appearance logic
+        var shouldAppear = false
+        
+        // Check if it's a regular todo with explicit due date
         if let dueDate = todo.dueDate {
             if calendar.isDate(dueDate, inSameDayAs: date) {
-                return true
+                shouldAppear = true
             }
         }
         
         // Check if it's a recurring todo that should appear on this date
         if let recurrenceConfig = todo.recurrenceConfig {
-            return shouldRecurringTodoAppearOnDate(todo, recurrenceConfig: recurrenceConfig, date: date)
+            shouldAppear = shouldRecurringTodoAppearOnDate(todo, recurrenceConfig: recurrenceConfig, date: date)
         }
         
         // Fallback: check if it was created on this date (for non-recurring, non-scheduled todos)
         if todo.dueDate == nil && todo.recurrenceConfig == nil {
-            return calendar.isDate(todo.createdAt, inSameDayAs: date)
+            shouldAppear = calendar.isDate(todo.createdAt, inSameDayAs: date)
         }
         
-        return false
+        // If it shouldn't appear based on date logic, return false immediately
+        if !shouldAppear {
+            return false
+        }
+        
+        // Phase 4 Enhancement: Hide todos that are completed on this specific date
+        if todo.isCompletedOnDate(date) {
+            return false
+        }
+        
+        return true
     }
     
     /// Helper function to check if a recurring todo should appear on a specific date
@@ -1077,18 +1091,56 @@ struct ModernCalendarGrid: View {
             // Todo titles (up to 2 visible)
             VStack(alignment: .leading, spacing: 1) {
                 ForEach(Array(todaysTask.prefix(2).enumerated()), id: \.offset) { index, todo in
-                    Text(todo.title)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(todo.isCompleted ? .green.opacity(0.8) : .white.opacity(0.9))
-                        .strikethrough(todo.isCompleted, color: .green.opacity(0.6))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .padding(.horizontal, 3)
-                        .padding(.vertical, 1)
-                        .background(
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(todo.isCompleted ? .green.opacity(0.15) : .cyan.opacity(0.15))
-                        )
+                    HStack(spacing: 3) {
+                        // Completion button
+                        Button(action: {
+                            completeTodoOnDate(todo, date: date)
+                        }) {
+                            Image(systemName: todo.isCompletedOnDate(date) ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(todo.isCompletedOnDate(date) ? .green : .white.opacity(0.6))
+                        }
+                        .buttonStyle(.plain)
+                        
+                        // Priority indicator (colored dot)
+                        Circle()
+                            .fill(priorityColor(for: todo.actualPriority))
+                            .frame(width: 4, height: 4)
+                            .opacity(todo.isCompletedOnDate(date) ? 0.5 : 0.8)
+                        
+                        // Category icon (if available)
+                        if !todo.categoryIcon.isEmpty {
+                            Image(systemName: todo.categoryIcon)
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundColor(.white.opacity(todo.isCompletedOnDate(date) ? 0.5 : 0.7))
+                        }
+                        
+                        // Todo title
+                        Text(todo.title)
+                            .font(.system(size: dynamicFontSize(for: todo.title), weight: .medium))
+                            .foregroundColor(todo.isCompletedOnDate(date) ? .green.opacity(0.8) : .white.opacity(0.9))
+                            .strikethrough(todo.isCompletedOnDate(date), color: .green.opacity(0.6))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(todo.isCompletedOnDate(date) ? .green.opacity(0.15) : .cyan.opacity(0.15))
+                    )
+                    .draggable(todo.id.uuidString) {
+                        // Drag preview
+                        Text(todo.title)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(.cyan.opacity(0.8))
+                            )
+                    }
                 }
             }
             
@@ -1107,10 +1159,9 @@ struct ModernCalendarGrid: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(
-                            isSelected ? .cyan :
                             isToday ? .cyan.opacity(0.6) :
                             isInCurrentMonth ? .white.opacity(0.1) : .clear,
-                            lineWidth: isSelected ? 2 : 1
+                            lineWidth: 1
                         )
                 )
         )
@@ -1122,6 +1173,85 @@ struct ModernCalendarGrid: View {
         .onLongPressGesture {
             // Long press to add task for this day
             onAddTaskForDay(date)
+        }
+        .dropDestination(for: String.self) { droppedItems, location in
+            // Handle todo drop
+            guard let todoIdString = droppedItems.first,
+                  let todoId = UUID(uuidString: todoIdString),
+                  let todo = todos.first(where: { $0.id == todoId }) else {
+                return false
+            }
+            
+            // Move todo to this date
+            moveTodo(todo, to: date)
+            return true
+        } isTargeted: { isTargeted in
+            // Visual feedback during drag over
+            // Could add visual indication here if needed
+        }
+    }
+    
+    /// Dynamic font size based on text length - shorter text gets larger font
+    private func dynamicFontSize(for text: String) -> CGFloat {
+        let length = text.count
+        switch length {
+        case 0...8:
+            return 16 // Very short text gets largest font
+        case 9...15:
+            return 14 // Medium text gets medium font
+        case 16...25:
+            return 13 // Longer text gets smaller font
+        default:
+            return 12 // Very long text gets smallest font
+        }
+    }
+    
+    /// Move a todo to a new date - handles both simple and recurring todos
+    private func moveTodo(_ todo: Todo, to newDate: Date) {
+        let calendar = Calendar.current
+        
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            if todo.isRecurring {
+                // For recurring todos: Move the entire recurrence pattern
+                // This updates the base dueDate which shifts all future occurrences
+                todo.dueDate = calendar.startOfDay(for: newDate)
+            } else {
+                // For simple todos: Just update the dueDate
+                todo.dueDate = calendar.startOfDay(for: newDate)
+            }
+            
+            // Preserve the time if it exists
+            if let existingTime = todo.dueTime {
+                let timeComponents = calendar.dateComponents([.hour, .minute], from: existingTime)
+                if let newDateTime = calendar.date(bySettingHour: timeComponents.hour ?? 0,
+                                                 minute: timeComponents.minute ?? 0,
+                                                 second: 0,
+                                                 of: newDate) {
+                    todo.dueDate = newDateTime
+                }
+            }
+        }
+    }
+    
+    /// Complete a todo on a specific date - handles both simple and recurring todos
+    private func completeTodoOnDate(_ todo: Todo, date: Date) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            // Use the new method from Todo model
+            todo.markCompletedOnDate(date)
+        }
+    }
+    
+    /// Get SwiftUI Color for priority level
+    private func priorityColor(for priority: TaskPriority) -> Color {
+        switch priority {
+        case .low:
+            return .gray
+        case .medium:
+            return .blue
+        case .high:
+            return .red
+        case .urgent:
+            return .red
         }
     }
 }

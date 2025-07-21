@@ -9,6 +9,7 @@ import Foundation
 import SwiftData
 import CoreTransferable
 
+
 @Model
 final class Todo: Identifiable, Transferable {
     @Attribute(.unique) var id: UUID
@@ -29,6 +30,11 @@ final class Todo: Identifiable, Transferable {
     
     // MARK: - Ordering Properties
     var sortOrder: Int = 0 // For manual reordering
+    
+    // MARK: - Rich Data Properties (Phase 4)
+    var priority: TaskPriority? // Task priority level (optional for migration)
+    var category: TaskCategory? // Task category for organization (optional for migration)
+    var completionDates: [Date] = [] // Track individual completions for recurring tasks
     
     // MARK: - Computed Properties
     var isRecurring: Bool {
@@ -109,6 +115,58 @@ final class Todo: Identifiable, Transferable {
         return "\(prefix)\n" + reminders.prefix(4).map { "• \($0)" }.joined(separator: "\n")
     }
     
+    // MARK: - Phase 4 Enhanced Properties
+    
+    /// Check if this todo is completed on a specific date (for recurring tasks)
+    func isCompletedOnDate(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        
+        // For simple todos, check overall completion status
+        if !isRecurring {
+            return isCompleted
+        }
+        
+        // For recurring todos, check if this specific date is in completionDates
+        return completionDates.contains { calendar.isDate($0, inSameDayAs: date) }
+    }
+    
+    /// Mark todo as completed on a specific date (for recurring tasks)
+    func markCompletedOnDate(_ date: Date) {
+        let calendar = Calendar.current
+        
+        // For simple todos, mark overall completion
+        if !isRecurring {
+            isCompleted = true
+            return
+        }
+        
+        // For recurring todos, add the date to completionDates if not already there
+        let alreadyCompleted = completionDates.contains { calendar.isDate($0, inSameDayAs: date) }
+        if !alreadyCompleted {
+            completionDates.append(calendar.startOfDay(for: date))
+        }
+    }
+    
+    /// Priority display color for UI (with default fallback)
+    var priorityColor: String {
+        return (priority ?? .medium).color
+    }
+    
+    /// Category icon for UI (with default fallback)
+    var categoryIcon: String {
+        return (category ?? .other).systemImage
+    }
+    
+    /// Get actual priority with fallback to medium
+    var actualPriority: TaskPriority {
+        return priority ?? .medium
+    }
+    
+    /// Get actual category with fallback to other
+    var actualCategory: TaskCategory {
+        return category ?? .other
+    }
+    
     init(title: String, originalInput: String? = nil) {
         self.id = UUID()
         self.title = title
@@ -116,6 +174,10 @@ final class Todo: Identifiable, Transferable {
         self.createdAt = Date()
         self.originalInput = originalInput
         self.sortOrder = Int(Date().timeIntervalSince1970) // Use timestamp for unique ordering
+        
+        // Set default values for new properties
+        self.priority = .medium
+        self.category = .other
     }
     
     // MARK: - Factory Methods
@@ -182,6 +244,20 @@ final class Todo: Identifiable, Transferable {
         }
         
         todo.aiDescription = parsedData.description
+        
+        // Set priority from AI parsing with fallback to medium
+        if let priorityString = parsedData.priority {
+            todo.priority = TaskPriority(rawValue: priorityString) ?? .medium
+        } else {
+            todo.priority = .medium
+        }
+        
+        // Set category from AI parsing with fallback to other
+        if let categoryString = parsedData.category {
+            todo.category = TaskCategory(rawValue: categoryString) ?? .other
+        } else {
+            todo.category = .other
+        }
         
         return todo
     }
