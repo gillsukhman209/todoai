@@ -19,6 +19,7 @@ struct ModernSpeedContentView: View {
     @State private var showCommandPalette = false
     @State private var showSchedulingView = false
     @State private var selectedTodoForScheduling: Todo?
+    @State private var currentMonth = Date()
     @State private var quickInput = ""
     @State private var selectedDate = Date()
     @State private var currentView: SpeedView = .today
@@ -47,12 +48,14 @@ struct ModernSpeedContentView: View {
     ]
     
     enum SpeedView: String, CaseIterable {
+        case calendar = "Calendar"
         case today = "Today"
         case upcoming = "Upcoming" 
         case all = "All"
         
         var icon: String {
             switch self {
+            case .calendar: return "calendar"
             case .today: return "calendar.badge.clock"
             case .upcoming: return "arrow.up.right"
             case .all: return "list.bullet"
@@ -85,10 +88,18 @@ struct ModernSpeedContentView: View {
     
     private var displayTodos: [Todo] {
         switch currentView {
+        case .calendar: return todos // All todos for calendar view
         case .today: return todayTodos
         case .upcoming: return upcomingTodos
         case .all: return todos.sorted(by: { !$0.isCompleted && $1.isCompleted })
         }
+    }
+    
+    /// Get todos for a specific date (used by calendar view)
+    private func todosForDate(_ date: Date) -> [Todo] {
+        return todos.filter { todo in
+            shouldTodoAppearOnDate(todo, date: date)
+        }.sorted(by: { !$0.isCompleted && $1.isCompleted })
     }
     
     var body: some View {
@@ -103,8 +114,12 @@ struct ModernSpeedContentView: View {
                 // Modern header
                 modernHeader
                 
-                // Speed-focused todo list
-                speedTodoList
+                // Content area - Calendar or Todo List
+                if currentView == .calendar {
+                    modernCalendarView
+                } else {
+                    speedTodoList
+                }
                 
                 // Lightning-fast input
                 lightningInput
@@ -137,9 +152,18 @@ struct ModernSpeedContentView: View {
     private var modernHeader: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(currentView.rawValue)
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(currentView.rawValue)
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    // Show selected date when in calendar mode
+                    if currentView == .calendar && !Calendar.current.isDate(selectedDate, inSameDayAs: Date()) {
+                        Text(selectedDate.formatted(date: .abbreviated, time: .omitted))
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.cyan.opacity(0.8))
+                    }
+                }
                 
                 HStack(spacing: 12) {
                     Text("\(displayTodos.filter { !$0.isCompleted }.count)")
@@ -243,6 +267,110 @@ struct ModernSpeedContentView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+    
+    // MARK: - Modern Calendar View
+    private var modernCalendarView: some View {
+        VStack(spacing: 0) {
+            // Month navigation
+            HStack {
+                Button(action: { 
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        currentMonth = Calendar.current.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
+                    }
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Circle()
+                                .fill(.white.opacity(0.1))
+                                .overlay(
+                                    Circle()
+                                        .stroke(.white.opacity(0.2), lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                VStack(spacing: 2) {
+                    Text(currentMonth.formatted(.dateTime.month(.wide)))
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text(currentMonth.formatted(.dateTime.year()))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                
+                Spacer()
+                
+                Button(action: { 
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        currentMonth = Calendar.current.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
+                    }
+                }) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Circle()
+                                .fill(.white.opacity(0.1))
+                                .overlay(
+                                    Circle()
+                                        .stroke(.white.opacity(0.2), lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+            
+            // Calendar content with modern wrapper
+            ModernCalendarWrapper(
+                todos: todos,
+                currentMonth: $currentMonth,
+                selectedDate: $selectedDate,
+                todosForDate: todosForDate,
+                onToggleComplete: { todo in
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        todo.isCompleted.toggle()
+                        try? modelContext.save()
+                    }
+                },
+                onDeleteTodo: { todo in
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        modelContext.delete(todo)
+                        try? modelContext.save()
+                    }
+                },
+                onScheduleTodo: { todo in
+                    selectedTodoForScheduling = todo
+                    showSchedulingView = true
+                },
+                onMoveTodo: { todo, date in
+                    todo.dueDate = date
+                    try? modelContext.save()
+                },
+                onAddTaskForDay: { date in
+                    selectedDate = date
+                    // Focus the input to create a task for this date
+                }
+            )
+        }
+        .focusable()
+        .onKeyPress { keyPress in
+            if currentView == .calendar {
+                handleCalendarKeyPress(keyPress)
+                return .handled
+            }
+            return .ignored
+        }
     }
     
     // MARK: - Speed Todo List  
@@ -399,6 +527,14 @@ struct ModernSpeedContentView: View {
                     suggestions = []
                     selectedSuggestionIndex = -1
                     
+                    // If we're in calendar view and have a selected date, assign it
+                    if currentView == .calendar, 
+                       let lastCreatedTodo = todos.last,
+                       !Calendar.current.isDate(selectedDate, inSameDayAs: Date()) {
+                        lastCreatedTodo.dueDate = selectedDate
+                        try? modelContext.save()
+                    }
+                    
                     // Haptic feedback for successful creation
                     #if canImport(UIKit)
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
@@ -512,6 +648,63 @@ struct ModernSpeedContentView: View {
         }.prefix(4)
         
         suggestions = Array(filtered)
+    }
+    
+    // MARK: - Calendar Navigation
+    
+    private func handleCalendarKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
+        let calendar = Calendar.current
+        
+        switch keyPress.key {
+        case .leftArrow:
+            if let previousDay = calendar.date(byAdding: .day, value: -1, to: selectedDate) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    selectedDate = previousDay
+                    // Update current month if we moved to a different month
+                    if !calendar.isDate(previousDay, equalTo: currentMonth, toGranularity: .month) {
+                        currentMonth = previousDay
+                    }
+                }
+            }
+            return .handled
+            
+        case .rightArrow:
+            if let nextDay = calendar.date(byAdding: .day, value: 1, to: selectedDate) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    selectedDate = nextDay
+                    // Update current month if we moved to a different month
+                    if !calendar.isDate(nextDay, equalTo: currentMonth, toGranularity: .month) {
+                        currentMonth = nextDay
+                    }
+                }
+            }
+            return .handled
+            
+        case .upArrow:
+            if let previousWeek = calendar.date(byAdding: .day, value: -7, to: selectedDate) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    selectedDate = previousWeek
+                    if !calendar.isDate(previousWeek, equalTo: currentMonth, toGranularity: .month) {
+                        currentMonth = previousWeek
+                    }
+                }
+            }
+            return .handled
+            
+        case .downArrow:
+            if let nextWeek = calendar.date(byAdding: .day, value: 7, to: selectedDate) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    selectedDate = nextWeek
+                    if !calendar.isDate(nextWeek, equalTo: currentMonth, toGranularity: .month) {
+                        currentMonth = nextWeek
+                    }
+                }
+            }
+            return .handled
+            
+        default:
+            return .ignored
+        }
     }
     
     // MARK: - Recurring Task Logic
@@ -703,6 +896,278 @@ struct ModernTodoCard: View {
             impactFeedback.prepare()
             impactFeedback.impactOccurred()
             #endif
+            onSchedule()
+        }
+    }
+}
+
+// MARK: - Modern Calendar Wrapper
+struct ModernCalendarWrapper: View {
+    let todos: [Todo]
+    @Binding var currentMonth: Date
+    @Binding var selectedDate: Date
+    let todosForDate: (Date) -> [Todo]
+    let onToggleComplete: (Todo) -> Void
+    let onDeleteTodo: (Todo) -> Void
+    let onScheduleTodo: (Todo) -> Void
+    let onMoveTodo: (Todo, Date) -> Void
+    let onAddTaskForDay: (Date) -> Void
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Calendar grid
+            ModernCalendarGrid(
+                todos: todos,
+                currentMonth: currentMonth,
+                selectedDate: $selectedDate,
+                todosForDate: todosForDate,
+                onToggleComplete: onToggleComplete,
+                onDeleteTodo: onDeleteTodo,
+                onScheduleTodo: onScheduleTodo,
+                onMoveTodo: onMoveTodo,
+                onAddTaskForDay: onAddTaskForDay
+            )
+            
+            // Selected day todos detail view
+            if !todosForDate(selectedDate).isEmpty {
+                selectedDayDetailView
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 120) // Space for input
+    }
+    
+    private var selectedDayDetailView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(selectedDate.formatted(date: .complete, time: .omitted))
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Spacer()
+                
+                Text("\(todosForDate(selectedDate).count) tasks")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            
+            LazyVStack(spacing: 8) {
+                ForEach(todosForDate(selectedDate), id: \.id) { todo in
+                    CompactTodoRow(
+                        todo: todo,
+                        onComplete: { onToggleComplete(todo) },
+                        onSchedule: { onScheduleTodo(todo) }
+                    )
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.white.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(.white.opacity(0.15), lineWidth: 1)
+                )
+        )
+        .padding(.top, 16)
+    }
+}
+
+// MARK: - Modern Calendar Grid
+struct ModernCalendarGrid: View {
+    let todos: [Todo]
+    let currentMonth: Date
+    @Binding var selectedDate: Date
+    let todosForDate: (Date) -> [Todo]
+    let onToggleComplete: (Todo) -> Void
+    let onDeleteTodo: (Todo) -> Void
+    let onScheduleTodo: (Todo) -> Void
+    let onMoveTodo: (Todo, Date) -> Void
+    let onAddTaskForDay: (Date) -> Void
+    
+    private let calendar = Calendar.current
+    
+    // Get weeks for the current month
+    private var weekDays: [[Date]] {
+        let startOfMonth = calendar.dateInterval(of: .month, for: currentMonth)!.start
+        let endOfMonth = calendar.dateInterval(of: .month, for: currentMonth)!.end
+        
+        let firstWeekday = calendar.dateComponents([.weekday], from: startOfMonth).weekday! - 1
+        let startOfWeek = calendar.date(byAdding: .day, value: -firstWeekday, to: startOfMonth)!
+        
+        var weeks: [[Date]] = []
+        var currentWeekStart = startOfWeek
+        
+        for _ in 0..<6 {
+            var week: [Date] = []
+            for dayOffset in 0..<7 {
+                let date = calendar.date(byAdding: .day, value: dayOffset, to: currentWeekStart)!
+                week.append(date)
+            }
+            weeks.append(week)
+            currentWeekStart = calendar.date(byAdding: .day, value: 7, to: currentWeekStart)!
+            
+            if currentWeekStart > endOfMonth && weeks.count >= 5 {
+                break
+            }
+        }
+        
+        return weeks
+    }
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            // Weekday headers
+            HStack(spacing: 0) {
+                ForEach(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], id: \.self) { weekday in
+                    Text(weekday)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.5))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.bottom, 8)
+            
+            // Calendar grid
+            ForEach(Array(weekDays.enumerated()), id: \.offset) { weekIndex, week in
+                HStack(spacing: 8) {
+                    ForEach(week, id: \.self) { date in
+                        modernDayCell(for: date)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func modernDayCell(for date: Date) -> some View {
+        let isInCurrentMonth = calendar.isDate(date, equalTo: currentMonth, toGranularity: .month)
+        let isToday = calendar.isDate(date, inSameDayAs: Date())
+        let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
+        let todaysTask = todosForDate(date)
+        let hasTasks = !todaysTask.isEmpty
+        
+        return VStack(alignment: .leading, spacing: 2) {
+            // Day number
+            HStack {
+                Text("\(calendar.component(.day, from: date))")
+                    .font(.system(size: 12, weight: isToday ? .bold : .medium))
+                    .foregroundColor(
+                        isToday ? .black :
+                        isSelected ? .black :
+                        isInCurrentMonth ? .white : .white.opacity(0.3)
+                    )
+                
+                Spacer()
+                
+                if todaysTask.count > 2 {
+                    Text("+\(todaysTask.count - 2)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(
+                            Capsule()
+                                .fill(.white.opacity(0.15))
+                        )
+                }
+            }
+            
+            // Todo titles (up to 2 visible)
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(Array(todaysTask.prefix(2).enumerated()), id: \.offset) { index, todo in
+                    Text(todo.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(todo.isCompleted ? .green.opacity(0.8) : .white.opacity(0.9))
+                        .strikethrough(todo.isCompleted, color: .green.opacity(0.6))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(todo.isCompleted ? .green.opacity(0.15) : .cyan.opacity(0.15))
+                        )
+                }
+            }
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 80)
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    isToday ? .cyan.opacity(0.3) :
+                    isSelected ? .white.opacity(0.2) :
+                    hasTasks ? .white.opacity(0.05) : .clear
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(
+                            isSelected ? .cyan :
+                            isToday ? .cyan.opacity(0.6) :
+                            isInCurrentMonth ? .white.opacity(0.1) : .clear,
+                            lineWidth: isSelected ? 2 : 1
+                        )
+                )
+        )
+        .onTapGesture {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                selectedDate = date
+            }
+        }
+        .onLongPressGesture {
+            // Long press to add task for this day
+            onAddTaskForDay(date)
+        }
+    }
+}
+
+// MARK: - Compact Todo Row (for calendar day details)
+struct CompactTodoRow: View {
+    let todo: Todo
+    let onComplete: () -> Void
+    let onSchedule: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Completion button
+            Button(action: onComplete) {
+                Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(todo.isCompleted ? .green : .white.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+            
+            // Todo content
+            VStack(alignment: .leading, spacing: 2) {
+                Text(todo.title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(todo.isCompleted ? .white.opacity(0.5) : .white)
+                    .strikethrough(todo.isCompleted, color: .white.opacity(0.5))
+                    .lineLimit(2)
+                
+                if !todo.scheduleDescription.isEmpty {
+                    Text(todo.scheduleDescription)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.cyan.opacity(0.8))
+                }
+            }
+            
+            Spacer()
+            
+            // Schedule indicator
+            if todo.isRecurring {
+                Image(systemName: "repeat")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.cyan.opacity(0.6))
+            }
+        }
+        .padding(.vertical, 4)
+        .onLongPressGesture {
             onSchedule()
         }
     }
