@@ -17,6 +17,8 @@ struct ModernSpeedContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var todos: [Todo]
     @State private var showCommandPalette = false
+    @State private var showSchedulingView = false
+    @State private var selectedTodoForScheduling: Todo?
     @State private var quickInput = ""
     @State private var selectedDate = Date()
     @State private var currentView: SpeedView = .today
@@ -60,21 +62,25 @@ struct ModernSpeedContentView: View {
     
     private var todayTodos: [Todo] {
         let today = Date()
-        let calendar = Calendar.current
         return todos.filter { todo in
-            calendar.isDate(todo.createdAt, inSameDayAs: today) || 
-            (todo.dueDate != nil && calendar.isDate(todo.dueDate!, inSameDayAs: today))
+            shouldTodoAppearOnDate(todo, date: today)
         }.sorted(by: { !$0.isCompleted && $1.isCompleted })
     }
     
     private var upcomingTodos: [Todo] {
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        let calendar = Calendar.current
+        let today = Date()
+        
         return todos.filter { todo in
-            if let dueDate = todo.dueDate {
-                return dueDate >= tomorrow
+            // Check each day in the next week
+            for dayOffset in 1...7 {
+                if let date = calendar.date(byAdding: .day, value: dayOffset, to: today),
+                   shouldTodoAppearOnDate(todo, date: date) {
+                    return true
+                }
             }
             return false
-        }.sorted(by: { ($0.dueDate ?? Date.distantFuture) < ($1.dueDate ?? Date.distantFuture) })
+        }.sorted(by: { !$0.isCompleted && $1.isCompleted })
     }
     
     private var displayTodos: [Todo] {
@@ -107,6 +113,15 @@ struct ModernSpeedContentView: View {
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showCommandPalette) {
             SimpleCommandPaletteView(isPresented: $showCommandPalette)
+        }
+        .sheet(isPresented: $showSchedulingView) {
+            if let todo = selectedTodoForScheduling {
+                SchedulingView(todo: todo) {
+                    // Handle scheduling completion
+                    showSchedulingView = false
+                    selectedTodoForScheduling = nil
+                }
+            }
         }
         .onAppear {
             // Set the model context for AI task creation
@@ -174,6 +189,27 @@ struct ModernSpeedContentView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                
+                Button(action: { 
+                    // Create a temporary todo for immediate scheduling
+                    let newTodo = Todo(title: "New Task")
+                    selectedTodoForScheduling = newTodo
+                    showSchedulingView = true
+                }) {
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle()
+                                .fill(.white.opacity(0.1))
+                                .overlay(
+                                    Circle()
+                                        .stroke(.white.opacity(0.2), lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 24)
@@ -227,6 +263,10 @@ struct ModernSpeedContentView: View {
                                 modelContext.delete(todo)
                                 try? modelContext.save()
                             }
+                        },
+                        onSchedule: {
+                            selectedTodoForScheduling = todo
+                            showSchedulingView = true
                         }
                     )
                 }
@@ -473,6 +513,83 @@ struct ModernSpeedContentView: View {
         
         suggestions = Array(filtered)
     }
+    
+    // MARK: - Recurring Task Logic
+    
+    /// Helper function to determine if a todo should appear on a specific date
+    private func shouldTodoAppearOnDate(_ todo: Todo, date: Date) -> Bool {
+        let calendar = Calendar.current
+        
+        // First check if it's a regular todo with explicit due date
+        if let dueDate = todo.dueDate {
+            if calendar.isDate(dueDate, inSameDayAs: date) {
+                return true
+            }
+        }
+        
+        // Check if it's a recurring todo that should appear on this date
+        if let recurrenceConfig = todo.recurrenceConfig {
+            return shouldRecurringTodoAppearOnDate(todo, recurrenceConfig: recurrenceConfig, date: date)
+        }
+        
+        // Fallback: check if it was created on this date (for non-recurring, non-scheduled todos)
+        if todo.dueDate == nil && todo.recurrenceConfig == nil {
+            return calendar.isDate(todo.createdAt, inSameDayAs: date)
+        }
+        
+        return false
+    }
+    
+    /// Helper function to check if a recurring todo should appear on a specific date
+    private func shouldRecurringTodoAppearOnDate(_ todo: Todo, recurrenceConfig: RecurrenceConfig, date: Date) -> Bool {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date)
+        
+        switch recurrenceConfig.type {
+        case .none:
+            return false
+            
+        case .hourly:
+            return true
+            
+        case .daily:
+            return true
+            
+        case .weekly:
+            if let dueDate = todo.dueDate {
+                let originalWeekday = calendar.component(.weekday, from: dueDate)
+                return weekday == originalWeekday
+            }
+            return false
+            
+        case .specificDays:
+            return recurrenceConfig.specificWeekdays.contains(weekday)
+            
+        case .monthly:
+            if let monthlyDay = recurrenceConfig.monthlyDay {
+                let day = calendar.component(.day, from: date)
+                return day == monthlyDay
+            }
+            return false
+            
+        case .yearly:
+            if let dueDate = todo.dueDate {
+                let originalMonth = calendar.component(.month, from: dueDate)
+                let originalDay = calendar.component(.day, from: dueDate)
+                let currentMonth = calendar.component(.month, from: date)
+                let currentDay = calendar.component(.day, from: date)
+                return originalMonth == currentMonth && originalDay == currentDay
+            }
+            return false
+            
+        case .customInterval:
+            // Custom interval logic would need more sophisticated date math
+            return false
+            
+        case .multipleDailyTimes:
+            return true
+        }
+    }
 }
 
 // MARK: - Modern Todo Card
@@ -480,6 +597,7 @@ struct ModernTodoCard: View {
     let todo: Todo
     let onComplete: () -> Void
     let onDelete: () -> Void
+    let onSchedule: () -> Void
     
     @State private var isPressed = false
     @State private var swipeOffset: CGFloat = 0
@@ -510,7 +628,17 @@ struct ModernTodoCard: View {
                     .strikethrough(todo.isCompleted, color: .white.opacity(0.5))
                     .lineLimit(3)
                 
-                if let dueDate = todo.dueDate {
+                // Show scheduling information
+                if !todo.scheduleDescription.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: todo.isRecurring ? "repeat" : "calendar")
+                            .font(.system(size: 12, weight: .medium))
+                        
+                        Text(todo.scheduleDescription)
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(.white.opacity(0.4))
+                } else if let dueDate = todo.dueDate {
                     HStack(spacing: 6) {
                         Image(systemName: "calendar")
                             .font(.system(size: 12, weight: .medium))
@@ -524,10 +652,18 @@ struct ModernTodoCard: View {
             
             Spacer()
             
-            // Priority indicator
-            Circle()
-                .fill(todo.isCompleted ? .green.opacity(0.6) : .cyan.opacity(0.8))
-                .frame(width: 8, height: 8)
+            // Priority/scheduling indicator
+            VStack(spacing: 4) {
+                if todo.isRecurring {
+                    Image(systemName: "repeat")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.cyan.opacity(0.8))
+                } else {
+                    Circle()
+                        .fill(todo.isCompleted ? .green.opacity(0.6) : .cyan.opacity(0.8))
+                        .frame(width: 8, height: 8)
+                }
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -560,6 +696,15 @@ struct ModernTodoCard: View {
         )
         .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isPressed)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: swipeOffset)
+        .onLongPressGesture {
+            // Trigger scheduling view on long press
+            #if canImport(UIKit)
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.prepare()
+            impactFeedback.impactOccurred()
+            #endif
+            onSchedule()
+        }
     }
 }
 
