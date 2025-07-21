@@ -17,8 +17,25 @@ struct FloatingTaskInput: View {
     let selectedDate: Date
     @FocusState private var isInputFocused: Bool
     
+    // Smart suggestions
+    @State private var suggestions: [String] = []
+    @State private var selectedSuggestionIndex = -1
+    
+    // Common task suggestions
+    private let commonTasks = [
+        "Buy groceries", "Exercise for 30 minutes", "Call dentist", "Pay bills",
+        "Clean room", "Study for exam", "Walk the dog", "Water plants",
+        "Do laundry", "Schedule doctor appointment", "Reply to emails",
+        "Read book", "Meditate", "Cook dinner", "Organize desk", "Backup files"
+    ]
+    
     var body: some View {
         VStack(spacing: 8) {
+            // Smart suggestions row
+            if !suggestions.isEmpty && isInputFocused && !viewModel.input.isEmpty {
+                suggestionsRow
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             
             // Main input container
             HStack(spacing: 12) {
@@ -37,7 +54,7 @@ struct FloatingTaskInput: View {
                     handleSubmit()
                 }
                 .onChange(of: viewModel.input) { oldValue, newValue in
-                    updateSuggestions()
+                    updateSuggestions(for: newValue)
                 }
                 
                 // Submit button or loading indicator
@@ -75,18 +92,21 @@ struct FloatingTaskInput: View {
     }
     
     private var inputBackground: some View {
-        // Clean light mode input background
+        // Dark gesture-enhanced input background
         RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(Color.white.opacity(0.9))
-            .stroke(
-                isInputFocused ? Color.accent.opacity(0.4) : Color.black.opacity(0.1),
-                lineWidth: isInputFocused ? 2 : 1
+            .fill(.ultraThinMaterial.opacity(0.8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(
+                        isInputFocused ? Color.accent.opacity(0.5) : Color.white.opacity(0.2),
+                        lineWidth: isInputFocused ? 2 : 1
+                    )
             )
             .shadow(
-                color: isInputFocused ? Color.accent.opacity(0.15) : Color.black.opacity(0.08),
-                radius: isInputFocused ? 12 : 6,
+                color: isInputFocused ? Color.accent.opacity(0.2) : Color.black.opacity(0.3),
+                radius: isInputFocused ? 20 : 10,
                 x: 0,
-                y: isInputFocused ? 6 : 3
+                y: isInputFocused ? 10 : 5
             )
     }
     
@@ -205,8 +225,59 @@ struct FloatingTaskInput: View {
         }
     }
     
-    private func updateSuggestions() {
-        // Can add smart suggestions logic here if needed
+    // MARK: - Smart Suggestions
+    
+    private var suggestionsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
+                    suggestionChip(
+                        suggestion: suggestion,
+                        isSelected: index == selectedSuggestionIndex,
+                        onTap: {
+                            viewModel.input = suggestion
+                            selectedSuggestionIndex = -1
+                            suggestions = []
+                        }
+                    )
+                }
+            }
+            .padding(.horizontal, 24)
+        }
+    }
+    
+    private func suggestionChip(suggestion: String, isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+        Button(action: onTap) {
+            Text(suggestion)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(isSelected ? .black : .white.opacity(0.9))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? .cyan : .white.opacity(0.15))
+                        .overlay(
+                            Capsule()
+                                .stroke(isSelected ? .clear : .white.opacity(0.3), lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(isSelected ? 1.05 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isSelected)
+    }
+    
+    private func updateSuggestions(for input: String) {
+        guard !input.isEmpty && input.count > 1 else {
+            suggestions = []
+            return
+        }
+        
+        let filtered = commonTasks.filter { task in
+            task.localizedCaseInsensitiveContains(input) && task != input
+        }.prefix(4)
+        
+        suggestions = Array(filtered)
     }
     
     // MARK: - Focus Management

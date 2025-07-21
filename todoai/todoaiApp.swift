@@ -57,7 +57,7 @@ struct todoaiApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ModernSpeedContentView()
                 .environmentObject(notificationDelegate)
                 .environmentObject(backgroundTaskManager)
                 .onAppear {

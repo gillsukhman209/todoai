@@ -121,10 +121,10 @@ enum LayoutDensity {
     }
 }
 
-// MARK: - Liquid Glass Design System
+// MARK: - Dark Gesture-Enhanced Design System
 extension Color {
-    // Vibrant Rainbow Color Palette
-    static let accent = Color(red: 0.4, green: 0.6, blue: 0.9) // Vibrant blue
+    // Vibrant accent colors for dark theme
+    static let accent = Color.cyan // Primary accent - cyan for dark theme
     static let accentSecondary = Color(red: 0.3, green: 0.7, blue: 0.8) // Rich teal
     static let accentPurple = Color(red: 0.6, green: 0.4, blue: 0.9) // Vibrant purple
     static let accentPink = Color(red: 0.9, green: 0.4, blue: 0.7) // Vibrant pink
@@ -133,24 +133,24 @@ extension Color {
     static let accentYellow = Color(red: 0.9, green: 0.8, blue: 0.2) // Vibrant yellow
     static let accentRed = Color(red: 0.9, green: 0.3, blue: 0.3) // Vibrant red
     
-    // Light mode gradient colors - very subtle pink hints
-    static let gradientStart = Color(red: 0.995, green: 0.99, blue: 0.995) // Almost white with hint of pink
-    static let gradientMid = Color(red: 0.99, green: 0.985, blue: 0.99) // Very subtle pink
-    static let gradientEnd = Color(red: 0.992, green: 0.988, blue: 0.992) // Barely pink
+    // Dark theme gradient backgrounds
+    static let gradientStart = Color(red: 0.02, green: 0.02, blue: 0.06) // Deep dark blue
+    static let gradientMid = Color.black // Pure black
+    static let gradientEnd = Color(red: 0.01, green: 0.01, blue: 0.03) // Very dark blue
     
-    // Status-specific colors
-    static let completedColor = Color(red: 0.2, green: 0.8, blue: 0.4) // Success green
-    static let urgentColor = Color(red: 0.9, green: 0.3, blue: 0.3) // Urgent red
-    static let warningColor = Color(red: 0.9, green: 0.7, blue: 0.2) // Warning orange
-    static let infoColor = Color(red: 0.3, green: 0.7, blue: 0.9) // Info blue
+    // Status-specific colors (optimized for dark theme)
+    static let completedColor = Color.green
+    static let urgentColor = Color.red
+    static let warningColor = Color.orange
+    static let infoColor = Color.blue
     
-    // Light mode glass morphism backgrounds
-    static let cardBackground = Color.black.opacity(0.04)
-    static let hoverBackground = Color.black.opacity(0.06)
-    static let activeBackground = Color.black.opacity(0.08)
+    // Dark mode glass morphism backgrounds
+    static let cardBackground = Color.white.opacity(0.05)
+    static let hoverBackground = Color.white.opacity(0.08)
+    static let activeBackground = Color.white.opacity(0.12)
     static let coloredCardBackground = LinearGradient(
         colors: [
-            Color.black.opacity(0.04),
+            Color.white.opacity(0.05),
             Color.accent.opacity(0.08),
             Color.accentSecondary.opacity(0.06)
         ],
@@ -158,23 +158,32 @@ extension Color {
         endPoint: .bottomTrailing
     )
     
-    // Light mode primary background
-    static let primaryBackground = Color.black.opacity(0.02)
+    // Dark mode primary background
+    static let primaryBackground = RadialGradient(
+        colors: [
+            Color(red: 0.02, green: 0.02, blue: 0.06),
+            Color.black,
+            Color(red: 0.01, green: 0.01, blue: 0.03)
+        ],
+        center: .center,
+        startRadius: 0,
+        endRadius: 1000
+    )
     
-    // Light mode text colors
-    static let primaryText = Color.black
-    static let secondaryText = Color.black.opacity(0.7)
-    static let tertiaryText = Color.black.opacity(0.5)
-    static let accentText = Color(red: 0.3, green: 0.4, blue: 0.6) // Slightly blue-tinted text for light mode
+    // Dark mode text colors
+    static let primaryText = Color.white
+    static let secondaryText = Color.white.opacity(0.8)
+    static let tertiaryText = Color.white.opacity(0.6)
+    static let accentText = Color.cyan
     
-    // Light mode glass border colors
-    static let glassBorder = Color.black.opacity(0.1)
-    static let glassActiveBorder = Color.black.opacity(0.15)
+    // Dark mode glass border colors
+    static let glassBorder = Color.white.opacity(0.1)
+    static let glassActiveBorder = Color.white.opacity(0.2)
     static let coloredGlassBorder = LinearGradient(
         colors: [
-            Color.accent.opacity(0.2),
-            Color.accentSecondary.opacity(0.15),
-            Color.accentPurple.opacity(0.1)
+            Color.accent.opacity(0.3),
+            Color.accentSecondary.opacity(0.2),
+            Color.accentPurple.opacity(0.15)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
@@ -209,6 +218,16 @@ struct ContentView: View {
     @State private var selectedView: TodoViewType = .calendar
     @State private var focusInputTrigger = false
     @State private var selectedDate = Date()
+    
+    // New gesture-enhanced features
+    @State private var isCommandPalettePresented = false
+    @State private var dragOffset: CGSize = .zero
+    @State private var isDragging = false
+    
+    #if canImport(UIKit)
+    private let haptics = UIImpactFeedbackGenerator(style: .light)
+    private let strongHaptics = UIImpactFeedbackGenerator(style: .heavy)
+    #endif
     
     private let calendar = Calendar.current
     
@@ -296,6 +315,11 @@ struct ContentView: View {
     
     var body: some View {
         ZStack(alignment: .leading) {
+            // Dark gesture-enhanced background
+            Rectangle()
+                .fill(Color.primaryBackground)
+                .ignoresSafeArea()
+            
             // Main content area
             TodoListView(
                 todos: filteredTodos,
@@ -386,54 +410,11 @@ struct ContentView: View {
                 .zIndex(300)
             }
         }
-        .background(
-            // Light mode background with very subtle pink hints
-            ZStack {
-                // Base light gradient - mostly white with extremely subtle pink
-                LinearGradient(
-                    colors: [
-                        Color.white,                                  // Pure white
-                        Color(red: 0.998, green: 0.995, blue: 0.998), // Barely pink
-                        Color(red: 0.995, green: 0.992, blue: 0.995), // Very subtle pink
-                        Color(red: 0.997, green: 0.994, blue: 0.997), // Almost white with pink hint
-                        Color(red: 0.996, green: 0.993, blue: 0.996), // Subtle pink
-                        Color(red: 0.999, green: 0.996, blue: 0.999), // Nearly white
-                        Color.white                                   // Pure white
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                
-                // Very subtle colorful overlay
-                LinearGradient(
-                    colors: [
-                        Color.gradientStart.opacity(0.3),
-                        Color.gradientMid.opacity(0.2),
-                        Color.gradientEnd.opacity(0.25),
-                        Color.accentPink.opacity(0.08),
-                        Color.accentPurple.opacity(0.05)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .blendMode(.overlay)
-                
-                // Subtle shimmer effect
-                LinearGradient(
-                    colors: [
-                        Color.clear,
-                        Color.accentPink.opacity(0.03),
-                        Color.accentPurple.opacity(0.02),
-                        Color.clear
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .blendMode(.softLight)
-            }
-            .ignoresSafeArea(.all) // Extend into title bar area
-        )
-        .preferredColorScheme(.light) // Light mode for proper text contrast
+        .preferredColorScheme(.dark) // Force dark theme
+        .gesture(globalGestures) // Add gesture support
+        .sheet(isPresented: $isCommandPalettePresented) {
+            SimpleCommandPaletteView(isPresented: $isCommandPalettePresented)
+        }
         .onAppear {
             self.setupTaskCreationViewModel()
         }
@@ -446,6 +427,63 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusTaskInput)) { _ in
+            focusTaskInput()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToCalendar"))) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedView = .calendar
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToToday"))) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedView = .today
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToUpcoming"))) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedView = .upcoming
+            }
+        }
+    }
+    
+    // MARK: - Gesture-Enhanced Features
+    
+    private var globalGestures: some Gesture {
+        SimultaneousGesture(
+            // Command palette gesture
+            LongPressGesture(minimumDuration: 0.5)
+                .onEnded { _ in
+                    isCommandPalettePresented = true
+                    #if canImport(UIKit)
+                    strongHaptics.impactOccurred()
+                    #endif
+                },
+            
+            // Drag gesture for bulk actions
+            DragGesture()
+                .onChanged { value in
+                    dragOffset = value.translation
+                    if !isDragging && abs(value.translation.height) > 50 {
+                        isDragging = true
+                        #if canImport(UIKit)
+                        haptics.impactOccurred()
+                        #endif
+                    }
+                }
+                .onEnded { value in
+                    handleGlobalDrag(value)
+                    dragOffset = .zero
+                    isDragging = false
+                }
+        )
+    }
+    
+    private func handleGlobalDrag(_ value: DragGesture.Value) {
+        if value.translation.height < -100 {
+            // Swipe up: Show command palette
+            isCommandPalettePresented = true
+        } else if value.translation.height > 100 {
+            // Swipe down: Focus input
             focusTaskInput()
         }
     }
@@ -729,22 +767,15 @@ struct FloatingSidebarView: View {
         }
         .frame(width: 260)
         .background(
-            // Clean light mode sidebar background
+            // Dark gesture-enhanced sidebar background
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.95),
-                            Color(red: 0.98, green: 0.98, blue: 0.99).opacity(0.9),
-                            Color(red: 0.97, green: 0.97, blue: 0.98).opacity(0.95)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                .fill(.ultraThinMaterial.opacity(0.8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
                 )
-                .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.3), radius: 25, x: 0, y: 12)
         .padding(.leading, 20)
         .padding(.vertical, 20)
     }
@@ -916,7 +947,7 @@ struct TodoListView: View {
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(Color.secondaryText)
                                 .frame(width: 36, height: 36)
-                                .background(Color.black.opacity(0.05))
+                                .background(Color.white.opacity(0.1))
                                 .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
@@ -1198,6 +1229,15 @@ struct TodoRowView: View {
     @State private var hasScheduledNotifications = false
     @FocusState private var isEditingFocused: Bool
     
+    // Gesture-enhanced features
+    @State private var swipeOffset: CGFloat = 0
+    @State private var showingActions = false
+    @State private var isPressed = false
+    
+    #if canImport(UIKit)
+    private let haptics = UIImpactFeedbackGenerator(style: .light)
+    #endif
+    
     // Date formatters
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -1260,12 +1300,59 @@ struct TodoRowView: View {
         .onChange(of: isEditing) { oldValue, newValue in
             onEditingChange(newValue)
         }
+        .offset(x: swipeOffset) // Add swipe offset
+        .gesture(swipeGesture) // Add gesture support
+        .scaleEffect(isPressed ? 0.98 : 1.0) // Add press feedback
+        .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.8), value: isPressed)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: swipeOffset)
+    }
+    
+    // MARK: - Gesture-Enhanced Interactions
+    
+    private var swipeGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                swipeOffset = value.translation.width * 0.3
+                showingActions = abs(value.translation.width) > 50
+            }
+            .onEnded { value in
+                if value.translation.width > 100 {
+                    // Swipe right: Complete todo
+                    #if canImport(UIKit)
+                    haptics.impactOccurred()
+                    #endif
+                    onToggleComplete()
+                } else if value.translation.width < -100 {
+                    // Swipe left: Delete todo
+                    #if canImport(UIKit)
+                    haptics.impactOccurred()
+                    #endif
+                    onDelete()
+                }
+                
+                // Reset swipe position
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    swipeOffset = 0
+                    showingActions = false
+                }
+            }
     }
     
     private var checkboxView: some View {
         Button(action: {
+            #if canImport(UIKit)
+            haptics.impactOccurred()
+            #endif
             withAnimation(.easeInOut(duration: 0.2)) {
+                isPressed = true
                 onToggleComplete()
+            }
+            
+            // Reset press state
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    isPressed = false
+                }
             }
         }) {
             ZStack {
