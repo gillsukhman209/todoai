@@ -30,7 +30,6 @@ struct ModernSpeedContentView: View {
         self._taskCreationViewModel = StateObject(wrappedValue: TaskCreationViewModel(openAIService: openAIService, modelContext: tempContainer.mainContext))
     }
     @FocusState private var isInputFocused: Bool
-    @FocusState private var isTodoListFocused: Bool
     
     // Smart suggestions
     @State private var suggestions: [String] = []
@@ -44,19 +43,18 @@ struct ModernSpeedContentView: View {
     @State private var isEditingTodo: Bool = false
     @State private var editingTodoId: UUID? = nil
     @State private var editingText: String = ""
+    @State private var keyboardMode: KeyboardMode = .input
+    
+    enum KeyboardMode {
+        case input      // Typing in input field
+        case navigation // Navigating through todos
+        case editing    // Editing a todo
+    }
     
     // Safety system for keyboard shortcuts
     private var isAnyTextInputActive: Bool {
-        // Check main input focus
-        if isInputFocused { return true }
-        
-        // Check if quickInput has content (user might be typing)
-        if !quickInput.isEmpty { return true }
-        
-        // Check if currently editing a todo
-        if isEditingTodo { return true }
-        
-        return false
+        // Only block when actually editing a todo, not during navigation
+        return keyboardMode == .editing
     }
     
     // Common task suggestions
@@ -202,18 +200,30 @@ struct ModernSpeedContentView: View {
     
     /// Move selection up in the todo list
     private func navigateUp() {
-        guard !isAnyTextInputActive else { return }
+        print("🔑 navigateUp() called")
+        print("🔑 isAnyTextInputActive: \(isAnyTextInputActive)")
+        guard !isAnyTextInputActive else { 
+            print("🔑 Blocked by isAnyTextInputActive")
+            return 
+        }
         
         let todos = navigableTodos
-        guard !todos.isEmpty else { return }
+        print("🔑 navigableTodos count: \(todos.count)")
+        guard !todos.isEmpty else { 
+            print("🔑 No todos available")
+            return 
+        }
         
         if let currentIndex = selectedTodoIndex {
+            print("🔑 Current index: \(currentIndex)")
             // Move to previous todo, wrap to bottom if at top
             let newIndex = currentIndex > 0 ? currentIndex - 1 : todos.count - 1
             selectedTodoId = todos[newIndex].id
+            print("🔑 New index: \(newIndex), selected: \(todos[newIndex].title)")
         } else {
-            // No selection, select last todo
+            print("🔑 No current selection, selecting last todo")
             selectedTodoId = todos.last?.id
+            print("🔑 Selected: \(todos.last?.title ?? "unknown")")
         }
     }
     
@@ -236,21 +246,38 @@ struct ModernSpeedContentView: View {
     
     /// Delete the currently selected todo
     private func deleteSelectedTodo() {
-        guard !isAnyTextInputActive,
-              let todo = selectedTodo else { return }
+        guard keyboardMode == .navigation,
+              let todo = selectedTodo,
+              let currentIndex = selectedTodoIndex else { return }
+        
+        let todos = navigableTodos
         
         withAnimation(.easeOut(duration: 0.3)) {
             modelContext.delete(todo)
             saveTodoChanges()
             
-            // Clear selection since the todo is deleted
-            selectedTodoId = nil
+            // Move focus to the nearest todo
+            if todos.count > 1 {
+                // If we deleted the last item, select the new last item
+                if currentIndex >= todos.count - 1 {
+                    // Select the item that will become the new last item
+                    if currentIndex > 0 {
+                        selectedTodoId = todos[currentIndex - 1].id
+                    }
+                } else {
+                    // Select the item that will take this position after deletion
+                    selectedTodoId = todos[currentIndex + 1].id
+                }
+            } else {
+                // No more todos, clear selection
+                selectedTodoId = nil
+            }
         }
     }
     
     /// Toggle completion of the currently selected todo
     private func toggleSelectedTodoCompletion() {
-        guard !isAnyTextInputActive,
+        guard keyboardMode == .navigation,
               let todo = selectedTodo else { return }
         
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -267,12 +294,13 @@ struct ModernSpeedContentView: View {
     
     /// Start editing the currently selected todo
     private func startEditingSelectedTodo() {
-        guard !isAnyTextInputActive,
+        guard keyboardMode == .navigation,
               let todo = selectedTodo else { return }
         
         editingTodoId = todo.id
         editingText = todo.title
         isEditingTodo = true
+        keyboardMode = .editing
     }
     
     /// Save the edited todo text
@@ -290,6 +318,8 @@ struct ModernSpeedContentView: View {
         }
         
         cancelEditingTodo()
+        
+        // Focus management handled by main view
     }
     
     /// Cancel editing and reset state
@@ -297,6 +327,7 @@ struct ModernSpeedContentView: View {
         isEditingTodo = false
         editingTodoId = nil
         editingText = ""
+        keyboardMode = .navigation
     }
     
     /// Reset selection when view changes
@@ -370,15 +401,6 @@ struct ModernSpeedContentView: View {
                 
                 // Content area - Calendar, Timeline, or Todo List - This should expand
                 ZStack {
-                    // Invisible focusable area for keyboard navigation
-                    Color.clear
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                        .focusable()
-                        .focused($isTodoListFocused)
-                        .onTapGesture {
-                            isTodoListFocused = true
-                        }
                     
                     if currentView == .calendar {
                         modernCalendarView
@@ -395,10 +417,10 @@ struct ModernSpeedContentView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
             }
         }
         .preferredColorScheme(.dark)
-        .focusEffectDisabled()
         .focusable(true)
         .onKeyPress { keyPress in
             return handleGlobalKeyPress(keyPress)
@@ -414,8 +436,7 @@ struct ModernSpeedContentView: View {
             // Verify database status and log diagnostics
             verifyDatabaseStatus()
             
-            // Focus the list area by default
-            isTodoListFocused = true
+            // Main view handles all keyboard events by default
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusTaskInput)) { _ in
             // Handle Command+N from menu
@@ -455,6 +476,14 @@ struct ModernSpeedContentView: View {
         .onChange(of: currentView) { oldValue, newValue in
             // Reset keyboard navigation selection when switching views
             resetSelection()
+        }
+        .onChange(of: isInputFocused) { oldValue, newValue in
+            // Update keyboard mode when input focus changes
+            if newValue {
+                keyboardMode = .input
+            } else if keyboardMode == .input {
+                keyboardMode = .navigation
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             // Save data when app goes to background
@@ -717,7 +746,6 @@ struct ModernSpeedContentView: View {
                         onCancelEdit: cancelEditingTodo,
                         onSelect: {
                             selectedTodoId = todo.id
-                            isTodoListFocused = true
                         }
                     )
                 }
@@ -1073,8 +1101,13 @@ struct ModernSpeedContentView: View {
     
     private func handleGlobalKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
         print("🔑 Key pressed: \(keyPress.key)")
-        print("🔑 Input focused: \(isInputFocused), List focused: \(isTodoListFocused)")
+        print("🔑 Characters: '\(keyPress.characters)' (count: \(keyPress.characters.count))")
+        print("🔑 Character codes: \(keyPress.characters.map { String(format: "%02X", $0.asciiValue ?? 0) })")
+        print("🔑 Input focused: \(isInputFocused)")
+        print("🔑 Keyboard mode: \(keyboardMode)")
         print("🔑 Any text active: \(isAnyTextInputActive)")
+        print("🔑 Selected todo ID: \(selectedTodoId?.uuidString ?? "none")")
+        print("🔑 Current view: \(currentView)")
         
         // Handle editing shortcuts first (if in edit mode)
         if isEditingTodo {
@@ -1093,19 +1126,67 @@ struct ModernSpeedContentView: View {
         // Handle general keyboard navigation
         switch keyPress.key {
         case .upArrow:
+            print("🔑 Up arrow detected")
             if currentView == .calendar {
+                print("🔑 Delegating to calendar handler")
                 return handleCalendarKeyPress(keyPress)
             } else {
-                navigateUp()
-                return .handled
+                // Always handle up arrow for navigation, regardless of input focus
+                if keyboardMode == .editing {
+                    print("🔑 In editing mode, ignoring up arrow")
+                    return .ignored
+                } else {
+                    // Switch to navigation mode if needed
+                    if keyboardMode == .input {
+                        print("🔑 Switching to navigation mode")
+                        keyboardMode = .navigation
+                        // Select last todo if none selected
+                        if selectedTodoId == nil {
+                            let todos = navigableTodos
+                            print("🔑 Available todos: \(todos.count)")
+                            if !todos.isEmpty {
+                                selectedTodoId = todos.last?.id
+                                print("🔑 Selected last todo: \(todos.last?.title ?? "unknown")")
+                            }
+                        }
+                    } else {
+                        print("🔑 Already in navigation mode, calling navigateUp()")
+                        navigateUp()
+                    }
+                    return .handled
+                }
             }
             
         case .downArrow:
+            print("🔑 Down arrow detected")
             if currentView == .calendar {
+                print("🔑 Delegating to calendar handler")
                 return handleCalendarKeyPress(keyPress)
             } else {
-                navigateDown()
-                return .handled
+                // Always handle down arrow for navigation, regardless of input focus
+                if keyboardMode == .editing {
+                    print("🔑 In editing mode, ignoring down arrow")
+                    return .ignored
+                } else {
+                    // Switch to navigation mode if needed
+                    if keyboardMode == .input {
+                        print("🔑 Switching to navigation mode")
+                        keyboardMode = .navigation
+                        // Select first todo if none selected
+                        if selectedTodoId == nil {
+                            let todos = navigableTodos
+                            print("🔑 Available todos: \(todos.count)")
+                            if !todos.isEmpty {
+                                selectedTodoId = todos.first?.id
+                                print("🔑 Selected first todo: \(todos.first?.title ?? "unknown")")
+                            }
+                        }
+                    } else {
+                        print("🔑 Already in navigation mode, calling navigateDown()")
+                        navigateDown()
+                    }
+                    return .handled
+                }
             }
             
         case .leftArrow, .rightArrow:
@@ -1116,8 +1197,12 @@ struct ModernSpeedContentView: View {
             return .ignored
             
         case .return:
-            toggleSelectedTodoCompletion()
-            return .handled
+            // Only handle Enter for todo completion if input field is not focused
+            if !isInputFocused {
+                toggleSelectedTodoCompletion()
+                return .handled
+            }
+            return .ignored
             
         case .delete:
             deleteSelectedTodo()
@@ -1130,11 +1215,18 @@ struct ModernSpeedContentView: View {
                 return .handled
             }
             
+            // Check for backspace (character code 7F)
+            if keyPress.characters == "\u{7F}" {
+                deleteSelectedTodo()
+                return .handled
+            }
+            
             // Delegate to calendar handler for other keys in calendar view
             if currentView == .calendar {
                 return handleCalendarKeyPress(keyPress)
             }
             
+            print("🔑 Unhandled key in main handler")
             return .ignored
         }
     }
@@ -1210,8 +1302,12 @@ struct ModernSpeedContentView: View {
             }
             
         case .return:
-            toggleSelectedTodoCompletion()
-            return .handled
+            // Only handle Enter for todo completion if input field is not focused
+            if !isInputFocused {
+                toggleSelectedTodoCompletion()
+                return .handled
+            }
+            return .ignored
             
         case .delete:
             deleteSelectedTodo()
@@ -1223,6 +1319,13 @@ struct ModernSpeedContentView: View {
                 startEditingSelectedTodo()
                 return .handled
             }
+            
+            // Check for backspace (character code 7F)
+            if keyPress.characters == "\u{7F}" {
+                deleteSelectedTodo()
+                return .handled
+            }
+            
             return .ignored
         }
     }
