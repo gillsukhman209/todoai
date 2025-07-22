@@ -48,6 +48,13 @@ struct ModernSpeedContentView: View {
     @State private var keyboardMode: KeyboardMode = .input
     @State private var needsFocusRestoration: Bool = false
     
+    // MARK: - Drag and Drop State
+    @State private var draggedTodo: Todo? = nil
+    @State private var dropTargetIndex: Int? = nil
+    @State private var isDragActive: Bool = false
+    @State private var dragOffset: CGSize = .zero
+    @State private var dragPreviewPosition: CGPoint = .zero
+    
     enum KeyboardMode {
         case input      // Typing in input field
         case navigation // Navigating through todos
@@ -139,11 +146,22 @@ struct ModernSpeedContentView: View {
     }
     
     private var displayTodos: [Todo] {
+        let baseTodos: [Todo]
         switch currentView {
-        case .calendar: return todos // All todos for calendar view
-        case .today: return todayTodos
-        case .upcoming: return upcomingTodos
-        case .all: return todos.sorted(by: { !$0.isCompleted && $1.isCompleted })
+        case .calendar: baseTodos = todos // All todos for calendar view
+        case .today: baseTodos = todayTodos
+        case .upcoming: baseTodos = upcomingTodos
+        case .all: baseTodos = todos.sorted(by: { !$0.isCompleted && $1.isCompleted })
+        }
+        
+        // Sort by sortOrder for drag and drop consistency, with completed todos at the bottom
+        return baseTodos.sorted { todo1, todo2 in
+            // Completed todos go to the bottom
+            if todo1.isCompleted != todo2.isCompleted {
+                return !todo1.isCompleted && todo2.isCompleted
+            }
+            // Within the same completion status, sort by sortOrder
+            return todo1.sortOrder < todo2.sortOrder
         }
     }
     
@@ -372,6 +390,109 @@ struct ModernSpeedContentView: View {
     private func resetSelection() {
         selectedTodoId = nil
         cancelEditingTodo()
+    }
+    
+    // MARK: - Drag and Drop Functions
+    
+    /// Handle when a todo starts being dragged from its drag handle
+    private func startDragging(todo: Todo, at location: CGPoint) {
+        print("🎯 Starting drag for: \(todo.title)")
+        draggedTodo = todo
+        isDragActive = true
+        dragPreviewPosition = location
+        dropTargetIndex = nil
+        
+        // Haptic feedback for drag start
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+    }
+    
+    /// Handle drag movement and update drop target
+    private func updateDrag(location: CGPoint) {
+        guard isDragActive else { return }
+        
+        dragPreviewPosition = location
+        
+        // Calculate which drop target we're over
+        let todos = displayTodos
+        let approximateCardHeight: CGFloat = 70
+        let spacing: CGFloat = isDragActive ? 8 : 12
+        
+        // Estimate which todo index we're hovering over based on Y position
+        let scrollOffset: CGFloat = 100 // Approximate offset from top of scroll view
+        let relativeY = location.y - scrollOffset
+        let hoveredIndex = max(0, min(todos.count, Int(relativeY / (approximateCardHeight + spacing))))
+        
+        if dropTargetIndex != hoveredIndex {
+            dropTargetIndex = hoveredIndex
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            print("🎯 Hovering over drop zone: \(hoveredIndex)")
+        }
+    }
+    
+    /// Handle when drag ends - perform the reorder
+    private func endDrag() {
+        defer {
+            draggedTodo = nil
+            isDragActive = false
+            dropTargetIndex = nil
+            dragPreviewPosition = .zero
+        }
+        
+        guard let draggedTodo = draggedTodo,
+              let targetIndex = dropTargetIndex else {
+            print("🎯 Drag cancelled - no valid drop target")
+            return
+        }
+        
+        let todos = displayTodos
+        guard let currentIndex = todos.firstIndex(where: { $0.id == draggedTodo.id }) else {
+            print("🎯 Error: Could not find dragged todo in current list")
+            return
+        }
+        
+        // Prevent dropping in the same location
+        if currentIndex == targetIndex {
+            print("🎯 Dropped in same location - no change needed")
+            return
+        }
+        
+        print("🎯 Reordering: moving \(draggedTodo.title) from \(currentIndex) to \(targetIndex)")
+        
+        // Perform the reorder with animation
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            reorderTodos(from: currentIndex, to: targetIndex)
+        }
+        
+        // Success haptic feedback
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+    }
+    
+    
+    /// Reorder todos by updating their sort orders
+    private func reorderTodos(from sourceIndex: Int, to targetIndex: Int) {
+        let currentTodos = displayTodos
+        guard sourceIndex >= 0 && sourceIndex < currentTodos.count &&
+              targetIndex >= 0 && targetIndex <= currentTodos.count else { return }
+        
+        let draggedTodo = currentTodos[sourceIndex]
+        
+        // Create new array with the todo moved to the target position
+        var reorderedTodos = currentTodos
+        reorderedTodos.remove(at: sourceIndex)
+        
+        // Adjust target index if it's after the removal
+        let adjustedTargetIndex = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
+        reorderedTodos.insert(draggedTodo, at: adjustedTargetIndex)
+        
+        // Update sort orders to maintain the new arrangement
+        for (newIndex, todo) in reorderedTodos.enumerated() {
+            todo.sortOrder = newIndex * 100  // Use increments of 100 to allow future insertions
+        }
+        
+        // Save the changes
+        saveTodoChanges()
+        
+        print("🎯 Reordered todos - moved \(draggedTodo.title) from \(sourceIndex) to \(adjustedTargetIndex)")
     }
     
     // MARK: - Persistence Helpers
@@ -779,44 +900,92 @@ struct ModernSpeedContentView: View {
     
     // MARK: - Speed Todo List  
     private var speedTodoList: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 12) {
-                ForEach(displayTodos, id: \.id) { todo in
-                    ModernTodoCard(
-                        todo: todo,
-                        onComplete: {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                todo.toggleCompletionOnDate(Date())
-                                saveTodoChanges()
+        ZStack {
+            // Main todo list
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: isDragActive ? 8 : 12) {
+                    let todos = displayTodos
+                    
+                    ForEach(Array(todos.enumerated()), id: \.element.id) { index, todo in
+                        VStack(spacing: 0) {
+                            // Drop zone indicator - shows where item will be dropped
+                            if isDragActive && dropTargetIndex == index {
+                                Capsule()
+                                    .fill(.blue)
+                                    .frame(height: 4)
+                                    .padding(.horizontal, 20)
+                                    .animation(.easeInOut(duration: 0.2), value: dropTargetIndex)
                             }
-                        },
-                        onDelete: {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                modelContext.delete(todo)
-                                saveTodoChanges()
-                            }
-                        },
-                        onSchedule: {
-                            // Scheduling functionality removed
-                        },
-                        isSelected: selectedTodoId == todo.id,
-                        isEditing: isEditingTodo && editingTodoId == todo.id,
-                        editingText: $editingText,
-                        onSaveEdit: saveEditedTodo,
-                        onCancelEdit: cancelEditingTodo,
-                        onSelect: {
-                            selectedTodoId = todo.id
+                            
+                            // Enhanced todo card with drag handle
+                            DraggableTodoCardView(
+                                todo: todo,
+                                index: index,
+                                isBeingDragged: draggedTodo?.id == todo.id,
+                                onComplete: {
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                        todo.toggleCompletionOnDate(Date())
+                                        saveTodoChanges()
+                                    }
+                                },
+                                onDelete: {
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                        modelContext.delete(todo)
+                                        saveTodoChanges()
+                                    }
+                                },
+                                onSchedule: {
+                                    // Scheduling functionality removed
+                                },
+                                isSelected: selectedTodoId == todo.id,
+                                isEditing: isEditingTodo && editingTodoId == todo.id,
+                                editingText: $editingText,
+                                onSaveEdit: saveEditedTodo,
+                                onCancelEdit: cancelEditingTodo,
+                                onSelect: {
+                                    selectedTodoId = todo.id
+                                },
+                                onDragStart: { location in
+                                    startDragging(todo: todo, at: location)
+                                },
+                                onDragChanged: { location in
+                                    updateDrag(location: location)
+                                },
+                                onDragEnd: {
+                                    endDrag()
+                                }
+                            )
                         }
-                    )
+                    }
+                    
+                    // Drop zone at the very bottom
+                    if isDragActive && dropTargetIndex == displayTodos.count {
+                        Capsule()
+                            .fill(.blue)
+                            .frame(height: 4)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 8)
+                            .animation(.easeInOut(duration: 0.2), value: dropTargetIndex)
+                    }
                 }
                 
                 if displayTodos.isEmpty {
                     modernEmptyState
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 120) // Space for input
+            .padding(.horizontal, 16)
+            
+            // Floating drag preview
+            if let draggedTodo = draggedTodo, isDragActive {
+                DragPreviewCard(todo: draggedTodo)
+                    .position(dragPreviewPosition)
+                    .zIndex(999)
+                    .allowsHitTesting(false)
+                    .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.8), value: dragPreviewPosition)
+            }
         }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 120) // Space for input
     }
     
     private var modernEmptyState: some View {
@@ -2638,6 +2807,122 @@ struct UpcomingTimelineView: View {
             }
         }
         .padding(.top, 60)
+    }
+}
+
+// MARK: - Professional Drag & Drop Components
+
+/// A todo card with a dedicated drag handle for professional drag and drop
+struct DraggableTodoCardView: View {
+    let todo: Todo
+    let index: Int
+    let isBeingDragged: Bool
+    let onComplete: () -> Void
+    let onDelete: () -> Void
+    let onSchedule: () -> Void
+    let isSelected: Bool
+    let isEditing: Bool
+    @Binding var editingText: String
+    let onSaveEdit: () -> Void
+    let onCancelEdit: () -> Void
+    let onSelect: () -> Void
+    let onDragStart: (CGPoint) -> Void
+    let onDragChanged: (CGPoint) -> Void
+    let onDragEnd: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            // Drag handle - only this area is draggable
+            DragHandle()
+                .opacity(isBeingDragged ? 0.3 : 1.0)
+                .gesture(
+                    DragGesture(coordinateSpace: .global)
+                        .onChanged { value in
+                            if !isBeingDragged {
+                                onDragStart(value.startLocation)
+                            }
+                            onDragChanged(value.location)
+                        }
+                        .onEnded { _ in
+                            onDragEnd()
+                        }
+                )
+            
+            // Regular todo card - maintains all existing functionality
+            ModernTodoCard(
+                todo: todo,
+                onComplete: onComplete,
+                onDelete: onDelete,
+                onSchedule: onSchedule,
+                isSelected: isSelected,
+                isEditing: isEditing,
+                editingText: $editingText,
+                onSaveEdit: onSaveEdit,
+                onCancelEdit: onCancelEdit,
+                onSelect: onSelect
+            )
+            .opacity(isBeingDragged ? 0.3 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isBeingDragged)
+        }
+    }
+}
+
+/// Drag handle with professional grip dots
+struct DragHandle: View {
+    var body: some View {
+        VStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { _ in
+                HStack(spacing: 3) {
+                    ForEach(0..<2, id: \.self) { _ in
+                        Circle()
+                            .fill(.white.opacity(0.4))
+                            .frame(width: 3, height: 3)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+}
+
+/// Floating drag preview that follows the cursor
+struct DragPreviewCard: View {
+    let todo: Todo
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Completion indicator
+            Circle()
+                .stroke(.green.opacity(0.6), lineWidth: 2)
+                .frame(width: 20, height: 20)
+                .overlay(
+                    Circle()
+                        .fill(.green.opacity(0.2))
+                )
+            
+            // Todo title
+            Text(todo.title)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white)
+                .lineLimit(1)
+            
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.black.opacity(0.2))
+                )
+                .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
+        )
+        .scaleEffect(1.05)
+        .rotationEffect(.degrees(3))
     }
 }
 
