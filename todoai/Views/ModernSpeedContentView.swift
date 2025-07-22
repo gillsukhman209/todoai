@@ -17,9 +17,6 @@ import UIKit
 struct ModernSpeedContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var todos: [Todo]
-    @State private var showCommandPalette = false
-    @State private var showSchedulingView = false
-    @State private var selectedTodoForScheduling: Todo?
     @State private var currentMonth = Date()
     @State private var quickInput = ""
     @State private var selectedDate = Date()
@@ -127,18 +124,6 @@ struct ModernSpeedContentView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showCommandPalette) {
-            SimpleCommandPaletteView(isPresented: $showCommandPalette)
-        }
-        .sheet(isPresented: $showSchedulingView) {
-            if let todo = selectedTodoForScheduling {
-                SchedulingView(todo: todo) {
-                    // Handle scheduling completion
-                    showSchedulingView = false
-                    selectedTodoForScheduling = nil
-                }
-            }
-        }
         .onAppear {
             // Set the model context for AI task creation
             taskCreationViewModel.updateModelContext(modelContext)
@@ -202,42 +187,6 @@ struct ModernSpeedContentView: View {
                     speedViewButton(for: view)
                 }
                 
-                Button(action: { showCommandPalette = true }) {
-                    Image(systemName: "command")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                        .frame(width: 36, height: 36)
-                        .background(
-                            Circle()
-                                .fill(.white.opacity(0.1))
-                                .overlay(
-                                    Circle()
-                                        .stroke(.white.opacity(0.2), lineWidth: 1)
-                                )
-                        )
-                }
-                .buttonStyle(.plain)
-                
-                Button(action: { 
-                    // Create a temporary todo for immediate scheduling
-                    let newTodo = Todo(title: "New Task")
-                    selectedTodoForScheduling = newTodo
-                    showSchedulingView = true
-                }) {
-                    Image(systemName: "calendar.badge.plus")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                        .frame(width: 36, height: 36)
-                        .background(
-                            Circle()
-                                .fill(.white.opacity(0.1))
-                                .overlay(
-                                    Circle()
-                                        .stroke(.white.opacity(0.2), lineWidth: 1)
-                                )
-                        )
-                }
-                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 24)
@@ -358,9 +307,8 @@ struct ModernSpeedContentView: View {
                         try? modelContext.save()
                     }
                 },
-                onScheduleTodo: { todo in
-                    selectedTodoForScheduling = todo
-                    showSchedulingView = true
+                onScheduleTodo: { _ in
+                    // Scheduling functionality removed
                 },
                 onMoveTodo: { todo, date in
                     todo.dueDate = date
@@ -402,8 +350,7 @@ struct ModernSpeedContentView: View {
                             }
                         },
                         onSchedule: {
-                            selectedTodoForScheduling = todo
-                            showSchedulingView = true
+                            // Scheduling functionality removed
                         }
                     )
                 }
