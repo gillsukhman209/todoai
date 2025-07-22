@@ -39,11 +39,6 @@ struct ModernSpeedContentView: View {
     
     // Performance optimization: cache for todo filtering
     @State private var todoCache: [String: [Todo]] = [:]
-    @State private var cachedDisplayTodos: [Todo] = []
-    @State private var cachedTodayTodos: [Todo] = []
-    @State private var cachedUpcomingTodos: [Todo] = []
-    @State private var lastTodoCount: Int = 0
-    @State private var lastViewType: SpeedView = .today
     
     // MARK: - Keyboard Navigation State
     @State private var selectedTodoId: UUID? = nil
@@ -99,11 +94,25 @@ struct ModernSpeedContentView: View {
     }
     
     private var todayTodos: [Todo] {
-        return cachedTodayTodos
+        let today = Date()
+        return todos.filter { todo in
+            shouldTodoAppearOnDate(todo, date: today, includeCompleted: true)
+        }
     }
     
     private var upcomingTodos: [Todo] {
-        return cachedUpcomingTodos
+        let calendar = Calendar.current
+        let today = Date()
+        
+        return todos.filter { todo in
+            for dayOffset in 1...7 {
+                if let date = calendar.date(byAdding: .day, value: dayOffset, to: today),
+                   shouldTodoAppearOnDate(todo, date: date, includeCompleted: false) {
+                    return true
+                }
+            }
+            return false
+        }
     }
     
     /// Group upcoming todos by date for timeline view (includes today + next 7 days)
@@ -136,53 +145,23 @@ struct ModernSpeedContentView: View {
     }
     
     private var displayTodos: [Todo] {
-        return cachedDisplayTodos
-    }
-    
-    private func updateCachedTodos() {
-        // Only update if todos have changed or view has changed
-        if todos.count == lastTodoCount && currentView == lastViewType && !cachedDisplayTodos.isEmpty {
-            return
-        }
-        
-        lastTodoCount = todos.count
-        lastViewType = currentView
-        
-        // Update today todos cache
-        let today = Date()
-        cachedTodayTodos = todos.filter { todo in
-            shouldTodoAppearOnDate(todo, date: today, includeCompleted: true)
-        }.sorted(by: { !$0.isCompleted && $1.isCompleted })
-        
-        // Update upcoming todos cache
-        let calendar = Calendar.current
-        cachedUpcomingTodos = todos.filter { todo in
-            for dayOffset in 1...7 {
-                if let date = calendar.date(byAdding: .day, value: dayOffset, to: today),
-                   shouldTodoAppearOnDate(todo, date: date, includeCompleted: false) {
-                    return true
-                }
-            }
-            return false
-        }.sorted(by: { !$0.isCompleted && $1.isCompleted })
-        
-        // Update display todos based on current view
         let baseTodos: [Todo]
         switch currentView {
         case .calendar: baseTodos = todos
-        case .today: baseTodos = cachedTodayTodos
-        case .upcoming: baseTodos = cachedUpcomingTodos
-        case .all: baseTodos = todos.sorted(by: { !$0.isCompleted && $1.isCompleted })
+        case .today: baseTodos = todayTodos 
+        case .upcoming: baseTodos = upcomingTodos
+        case .all: baseTodos = todos
         }
         
-        // Sort once and cache
-        cachedDisplayTodos = baseTodos.sorted { todo1, todo2 in
+        // Sort with completed todos at the bottom
+        return baseTodos.sorted { todo1, todo2 in
             if todo1.isCompleted != todo2.isCompleted {
                 return !todo1.isCompleted && todo2.isCompleted
             }
             return todo1.sortOrder < todo2.sortOrder
         }
     }
+    
     
     // MARK: - Keyboard Navigation Helpers
     
@@ -343,7 +322,7 @@ struct ModernSpeedContentView: View {
         guard keyboardMode == .navigation,
               let todo = selectedTodo else { return }
         
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+        withAnimation(.easeInOut(duration: 0.2)) {
             if currentView == .calendar {
                 // For calendar view, toggle completion on selected date
                 todo.toggleCompletionOnDate(selectedDate)
@@ -529,9 +508,8 @@ struct ModernSpeedContentView: View {
     /// Save context whenever a todo is modified
     private func saveTodoChanges() {
         saveContext()
-        // Clear cache and update when todos change
+        // Clear cache when todos change
         todoCache.removeAll()
-        updateCachedTodos()
     }
     
     /// Verify database status and log todo count
@@ -636,9 +614,6 @@ struct ModernSpeedContentView: View {
             taskCreationViewModel.updateModelContext(modelContext)
             taskCreationViewModel.updateSelectedDate(selectedDate)
             
-            // Initialize cached todos
-            updateCachedTodos()
-            
             // Ensure main view has focus for keyboard navigation
             DispatchQueue.main.async {
                 isMainViewFocused = true
@@ -690,12 +665,6 @@ struct ModernSpeedContentView: View {
         .onChange(of: currentView) { oldValue, newValue in
             // Reset keyboard navigation selection when switching views
             resetSelection()
-            // Update cached todos when view changes
-            updateCachedTodos()
-        }
-        .onChange(of: todos.count) { oldValue, newValue in
-            // Update cached todos when todos change
-            updateCachedTodos()
         }
         .onChange(of: isInputFocused) { oldValue, newValue in
             // Update keyboard mode when input focus changes
@@ -904,14 +873,12 @@ struct ModernSpeedContentView: View {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         todo.toggleCompletionOnDate(selectedDate)
                         saveTodoChanges()
-                        updateCachedTodos()
                     }
                 },
                 onDeleteTodo: { todo in
                     withAnimation(.easeInOut(duration: 0.2)) {
                         modelContext.delete(todo)
                         saveTodoChanges()
-                        updateCachedTodos()
                     }
                 },
                 onScheduleTodo: { _ in
@@ -974,14 +941,12 @@ struct ModernSpeedContentView: View {
                                     withAnimation(.easeInOut(duration: 0.2)) {
                                         todo.toggleCompletionOnDate(Date())
                                         saveTodoChanges()
-                                        updateCachedTodos()
                                     }
                                 },
                                 onDelete: {
                                     withAnimation(.easeInOut(duration: 0.2)) {
                                         modelContext.delete(todo)
                                         saveTodoChanges()
-                                        updateCachedTodos()
                                     }
                                 },
                                 onSchedule: {
@@ -2306,7 +2271,7 @@ struct ModernCalendarGrid: View {
     
     /// Complete a todo on a specific date - handles both simple and recurring todos
     private func completeTodoOnDate(_ todo: Todo, date: Date) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+        withAnimation(.easeInOut(duration: 0.2)) {
             // Use the smart toggle method from Todo model
             todo.toggleCompletionOnDate(date)
         }
