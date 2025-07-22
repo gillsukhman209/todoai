@@ -39,6 +39,11 @@ struct ModernSpeedContentView: View {
     
     // Performance optimization: cache for todo filtering
     @State private var todoCache: [String: [Todo]] = [:]
+    @State private var cachedDisplayTodos: [Todo] = []
+    @State private var cachedTodayTodos: [Todo] = []
+    @State private var cachedUpcomingTodos: [Todo] = []
+    @State private var lastTodoCount: Int = 0
+    @State private var lastViewType: SpeedView = .today
     
     // MARK: - Keyboard Navigation State
     @State private var selectedTodoId: UUID? = nil
@@ -94,26 +99,11 @@ struct ModernSpeedContentView: View {
     }
     
     private var todayTodos: [Todo] {
-        let today = Date()
-        return todos.filter { todo in
-            shouldTodoAppearOnDate(todo, date: today, includeCompleted: true)
-        }.sorted(by: { !$0.isCompleted && $1.isCompleted })
+        return cachedTodayTodos
     }
     
     private var upcomingTodos: [Todo] {
-        let calendar = Calendar.current
-        let today = Date()
-        
-        return todos.filter { todo in
-            // Check each day in the next week
-            for dayOffset in 1...7 {
-                if let date = calendar.date(byAdding: .day, value: dayOffset, to: today),
-                   shouldTodoAppearOnDate(todo, date: date, includeCompleted: false) {
-                    return true
-                }
-            }
-            return false
-        }.sorted(by: { !$0.isCompleted && $1.isCompleted })
+        return cachedUpcomingTodos
     }
     
     /// Group upcoming todos by date for timeline view (includes today + next 7 days)
@@ -146,21 +136,50 @@ struct ModernSpeedContentView: View {
     }
     
     private var displayTodos: [Todo] {
+        return cachedDisplayTodos
+    }
+    
+    private func updateCachedTodos() {
+        // Only update if todos have changed or view has changed
+        if todos.count == lastTodoCount && currentView == lastViewType && !cachedDisplayTodos.isEmpty {
+            return
+        }
+        
+        lastTodoCount = todos.count
+        lastViewType = currentView
+        
+        // Update today todos cache
+        let today = Date()
+        cachedTodayTodos = todos.filter { todo in
+            shouldTodoAppearOnDate(todo, date: today, includeCompleted: true)
+        }.sorted(by: { !$0.isCompleted && $1.isCompleted })
+        
+        // Update upcoming todos cache
+        let calendar = Calendar.current
+        cachedUpcomingTodos = todos.filter { todo in
+            for dayOffset in 1...7 {
+                if let date = calendar.date(byAdding: .day, value: dayOffset, to: today),
+                   shouldTodoAppearOnDate(todo, date: date, includeCompleted: false) {
+                    return true
+                }
+            }
+            return false
+        }.sorted(by: { !$0.isCompleted && $1.isCompleted })
+        
+        // Update display todos based on current view
         let baseTodos: [Todo]
         switch currentView {
-        case .calendar: baseTodos = todos // All todos for calendar view
-        case .today: baseTodos = todayTodos
-        case .upcoming: baseTodos = upcomingTodos
+        case .calendar: baseTodos = todos
+        case .today: baseTodos = cachedTodayTodos
+        case .upcoming: baseTodos = cachedUpcomingTodos
         case .all: baseTodos = todos.sorted(by: { !$0.isCompleted && $1.isCompleted })
         }
         
-        // Sort by sortOrder for drag and drop consistency, with completed todos at the bottom
-        return baseTodos.sorted { todo1, todo2 in
-            // Completed todos go to the bottom
+        // Sort once and cache
+        cachedDisplayTodos = baseTodos.sorted { todo1, todo2 in
             if todo1.isCompleted != todo2.isCompleted {
                 return !todo1.isCompleted && todo2.isCompleted
             }
-            // Within the same completion status, sort by sortOrder
             return todo1.sortOrder < todo2.sortOrder
         }
     }
@@ -459,7 +478,7 @@ struct ModernSpeedContentView: View {
         print("🎯 Reordering: moving \(draggedTodo.title) from \(currentIndex) to \(targetIndex)")
         
         // Perform the reorder with animation
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+        withAnimation(.easeInOut(duration: 0.2)) {
             reorderTodos(from: currentIndex, to: targetIndex)
         }
         
@@ -510,6 +529,9 @@ struct ModernSpeedContentView: View {
     /// Save context whenever a todo is modified
     private func saveTodoChanges() {
         saveContext()
+        // Clear cache and update when todos change
+        todoCache.removeAll()
+        updateCachedTodos()
     }
     
     /// Verify database status and log todo count
@@ -555,18 +577,32 @@ struct ModernSpeedContentView: View {
             
             // Main speed-focused layout
             VStack(spacing: 0) {
-                // Modern header
+                // Modern header - always visible with fixed height
                 modernHeader
+                    .zIndex(100) // Ensure header stays on top
+                    .fixedSize(horizontal: false, vertical: true)
                 
                 // Content area - Calendar, Timeline, or Todo List - This should expand
                 ZStack {
                     
                     if currentView == .calendar {
                         modernCalendarView
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .move(edge: .leading).combined(with: .opacity)
+                            ))
                     } else if currentView == .upcoming {
                         upcomingTimelineView
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .move(edge: .leading).combined(with: .opacity)
+                            ))
                     } else {
                         speedTodoList
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .move(edge: .leading).combined(with: .opacity)
+                            ))
                     }
                     
                     // Lightning-fast input overlay at bottom
@@ -577,6 +613,7 @@ struct ModernSpeedContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
+                .clipped() // Prevent content from overlapping header
             }
         }
         .preferredColorScheme(.dark)
@@ -599,6 +636,9 @@ struct ModernSpeedContentView: View {
             taskCreationViewModel.updateModelContext(modelContext)
             taskCreationViewModel.updateSelectedDate(selectedDate)
             
+            // Initialize cached todos
+            updateCachedTodos()
+            
             // Ensure main view has focus for keyboard navigation
             DispatchQueue.main.async {
                 isMainViewFocused = true
@@ -616,28 +656,28 @@ struct ModernSpeedContentView: View {
             // Handle Command+N from menu
             isInputFocused = true
             if currentView != .today {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                withAnimation(.easeInOut(duration: 0.2)) {
                     currentView = .today
                 }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showTodayView)) { _ in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 currentView = .today
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showUpcomingView)) { _ in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 currentView = .upcoming
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showCalendarView)) { _ in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 currentView = .calendar
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showAllView)) { _ in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 currentView = .all
             }
         }
@@ -650,6 +690,12 @@ struct ModernSpeedContentView: View {
         .onChange(of: currentView) { oldValue, newValue in
             // Reset keyboard navigation selection when switching views
             resetSelection()
+            // Update cached todos when view changes
+            updateCachedTodos()
+        }
+        .onChange(of: todos.count) { oldValue, newValue in
+            // Update cached todos when todos change
+            updateCachedTodos()
         }
         .onChange(of: isInputFocused) { oldValue, newValue in
             // Update keyboard mode when input focus changes
@@ -735,7 +781,7 @@ struct ModernSpeedContentView: View {
     
     private func speedViewButton(for view: SpeedView) -> some View {
         Button(action: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 currentView = view
                 // Reset selected date to today when leaving calendar view
                 if view != .calendar {
@@ -792,7 +838,7 @@ struct ModernSpeedContentView: View {
             // Month navigation
             HStack {
                 Button(action: { 
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    withAnimation(.easeInOut(duration: 0.25)) {
                         currentMonth = Calendar.current.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
                     }
                 }) {
@@ -826,7 +872,7 @@ struct ModernSpeedContentView: View {
                 Spacer()
                 
                 Button(action: { 
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    withAnimation(.easeInOut(duration: 0.25)) {
                         currentMonth = Calendar.current.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
                     }
                 }) {
@@ -855,15 +901,17 @@ struct ModernSpeedContentView: View {
                 selectedDate: $selectedDate,
                 todosForDate: todosForDate,
                 onToggleComplete: { todo in
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         todo.toggleCompletionOnDate(selectedDate)
                         saveTodoChanges()
+                        updateCachedTodos()
                     }
                 },
                 onDeleteTodo: { todo in
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         modelContext.delete(todo)
                         saveTodoChanges()
+                        updateCachedTodos()
                     }
                 },
                 onScheduleTodo: { _ in
@@ -923,15 +971,17 @@ struct ModernSpeedContentView: View {
                                 index: index,
                                 isBeingDragged: draggedTodo?.id == todo.id,
                                 onComplete: {
-                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
                                         todo.toggleCompletionOnDate(Date())
                                         saveTodoChanges()
+                                        updateCachedTodos()
                                     }
                                 },
                                 onDelete: {
-                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
                                         modelContext.delete(todo)
                                         saveTodoChanges()
+                                        updateCachedTodos()
                                     }
                                 },
                                 onSchedule: {
@@ -981,7 +1031,7 @@ struct ModernSpeedContentView: View {
                     .position(dragPreviewPosition)
                     .zIndex(999)
                     .allowsHitTesting(false)
-                    .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.8), value: dragPreviewPosition)
+                    .animation(.easeOut(duration: 0.1), value: dragPreviewPosition)
             }
         }
         .padding(.horizontal, 24)
