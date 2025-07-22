@@ -48,39 +48,125 @@ final class TaskCreationViewModel: ObservableObject {
         selectedDate = date
     }
     
-    /// Detect if input contains scheduling keywords
+    /// Ultra-smart AI intent detection - revolutionized for maximum intelligence
     private func containsSchedulingKeywords(_ input: String) -> Bool {
-        let schedulingKeywords = [
-            // Time indicators
-            "at", "by", "before", "after", "around", "pm", "am", "p.m.", "a.m.",
-            // Date indicators  
-            "today", "tomorrow", "tonight", "morning", "afternoon", "evening", "night",
-            "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-            "mon", "tue", "wed", "thu", "fri", "sat", "sun",
-            "next", "this", "last", "week", "month", "year",
-            // Recurrence indicators
-            "every", "each", "daily", "weekly", "monthly", "yearly",
-            "repeat", "recurring", "regularly", "schedule",
-            // Reminder indicators
-            "remind", "reminder", "alert", "notify", "notification",
-            // Due date indicators
-            "due", "deadline", "expires", "until", "through"
-        ]
-        
         let lowercased = input.lowercased()
         
-        // Use word boundaries to avoid false positives
-        // e.g., "category" shouldn't match "at" 
-        for keyword in schedulingKeywords {
-            let pattern = "\\b\(NSRegularExpression.escapedPattern(for: keyword))\\b"
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
-                let range = NSRange(location: 0, length: lowercased.count)
-                if regex.firstMatch(in: lowercased, options: [], range: range) != nil {
-                    return true
-                }
+        logger.info("🔍 Ultra-Smart Analysis: '\(input)'")
+        
+        // INSTANT DETECTION: These patterns ALWAYS trigger AI processing (100% confidence)
+        let instantTriggers = [
+            // Frequency words that ALWAYS indicate scheduling
+            "everyday", "daily", "weekly", "monthly", "yearly", "nightly", "hourly",
+            "every day", "each day", "each morning", "every morning", "every evening", "every night",
+            "every week", "every month", "every year", "all week", "weekends", "weekdays",
+            // Explicit scheduling language
+            "remind", "reminder", "alert", "notify", "notification", "schedule",
+            // Time-based patterns
+            "at ", " pm", " am", "p.m.", "a.m.", "o'clock", "tonight", "tomorrow",
+            "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+            // Relative time
+            " in ", "mins", "minutes", "hours", "hrs", "seconds", "sec",
+            // Recurring patterns
+            "repeat", "recurring", "regularly", "routine", "habit"
+        ]
+        
+        // Check for instant triggers
+        for trigger in instantTriggers {
+            if lowercased.contains(trigger) {
+                logger.info("🚀 INSTANT TRIGGER FOUND: '\(trigger)' - Processing with AI")
+                return true
             }
         }
         
+        // SMART PATTERN RECOGNITION: Action + Frequency combinations
+        let frequencyWords = ["everyday", "daily", "weekly", "monthly", "yearly", "always", "regularly"]
+        let actionWords = [
+            "call", "text", "message", "email", "contact", "phone",
+            "exercise", "workout", "run", "jog", "walk", "gym", "stretch",
+            "clean", "tidy", "organize", "vacuum", "sweep", "dust",
+            "check", "review", "read", "study", "learn", "practice",
+            "water", "feed", "take", "drink", "eat", "cook", "prepare",
+            "backup", "update", "sync", "save", "download", "upload",
+            "meditate", "pray", "journal", "write", "plan", "schedule",
+            "wake", "sleep", "brush", "shower", "wash", "shave"
+        ]
+        
+        // If we find ANY action word + ANY frequency word = SCHEDULE
+        var foundAction = false
+        var foundFrequency = false
+        
+        for action in actionWords {
+            if lowercased.contains(action) {
+                foundAction = true
+                logger.info("📋 Found action word: '\(action)'")
+                break
+            }
+        }
+        
+        for frequency in frequencyWords {
+            if lowercased.contains(frequency) {
+                foundFrequency = true
+                logger.info("⏰ Found frequency word: '\(frequency)'")
+                break
+            }
+        }
+        
+        if foundAction && foundFrequency {
+            logger.info("🎯 SMART COMBO DETECTED: Action + Frequency = Schedule - Processing with AI")
+            return true
+        }
+        
+        // CONTEXTUAL UNDERSTANDING: Time-related context
+        let timeContextPatterns = [
+            "\\b\\d{1,2}:\\d{2}\\b",           // 8:30, 12:00
+            "\\b\\d{1,2}(am|pm)\\b",          // 8am, 5pm
+            "\\bin \\d+\\s*(min|hour)\\b",    // in 30 mins, in 2 hours
+            "\\bafter \\w+\\b",               // after lunch, after work
+            "\\bbefore \\w+\\b",              // before bed, before dinner
+            "\\bevery \\w+\\b",               // every monday, every morning
+            "\\beach \\w+\\b",                // each day, each week
+            "\\bonce \\w+\\b",                // once daily, once weekly
+            "\\btwice \\w+\\b"                // twice daily, twice weekly
+        ]
+        
+        for pattern in timeContextPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+               regex.firstMatch(in: lowercased, options: [], range: NSRange(location: 0, length: lowercased.count)) != nil {
+                logger.info("🎯 TIME PATTERN DETECTED: '\(pattern)' - Processing with AI")
+                return true
+            }
+        }
+        
+        // SEMANTIC INTELLIGENCE: Understand inherently temporal language
+        let inherentlyTemporalPhrases = [
+            "morning routine", "bedtime", "wake up", "go to sleep", "lunch break",
+            "work out", "check in", "follow up", "touch base", "catch up",
+            "daily dose", "weekly check", "monthly review", "yearly goal"
+        ]
+        
+        for phrase in inherentlyTemporalPhrases {
+            if lowercased.contains(phrase) {
+                logger.info("🧠 SEMANTIC TRIGGER: '\(phrase)' - Processing with AI")
+                return true
+            }
+        }
+        
+        // ULTRA-AGGRESSIVE DETECTION: Better to over-detect than miss
+        let aggressiveKeywords = [
+            "due", "deadline", "expires", "until", "through", "by", "before", "after",
+            "next", "this", "last", "week", "month", "year", "today", "morning", "afternoon", "evening",
+            "habit", "practice", "ritual", "custom", "always", "usually", "often", "frequently"
+        ]
+        
+        for keyword in aggressiveKeywords {
+            if lowercased.contains(keyword) {
+                logger.info("⚡ AGGRESSIVE DETECTION: '\(keyword)' - Processing with AI")
+                return true
+            }
+        }
+        
+        logger.info("❌ No scheduling intent detected - Creating simple task")
         return false
     }
     

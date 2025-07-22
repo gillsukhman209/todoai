@@ -1327,9 +1327,17 @@ struct CompactTodoRow: View {
             HStack(spacing: 12) {
                 // Completion button
                 Button(action: onComplete) {
-                    Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(todo.isCompleted ? .green : .white.opacity(0.6))
+                    ZStack {
+                        Circle()
+                            .stroke(todo.isCompleted ? .green : .white.opacity(0.3), lineWidth: 2)
+                            .frame(width: 20, height: 20)
+                        
+                        if todo.isCompleted {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.green)
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
                 
@@ -1342,26 +1350,41 @@ struct CompactTodoRow: View {
                         .lineLimit(2)
                     
                     if !todo.scheduleDescription.isEmpty {
-                        Text(todo.scheduleDescription)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.cyan.opacity(0.8))
+                        HStack(spacing: 4) {
+                            Image(systemName: todo.isRecurring ? "repeat" : "calendar")
+                                .font(.system(size: 10, weight: .medium))
+                            
+                            Text(todo.scheduleDescription)
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.white.opacity(0.4))
                     }
                 }
                 
                 Spacer()
                 
-                // Schedule indicator
-                if todo.isRecurring {
-                    Image(systemName: "repeat")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.cyan.opacity(0.6))
+                // Priority/scheduling indicator
+                VStack(spacing: 4) {
+                    if todo.isRecurring {
+                        Image(systemName: "repeat")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.cyan.opacity(0.8))
+                    } else {
+                        Circle()
+                            .fill(todo.isCompleted ? .green.opacity(0.6) : .cyan.opacity(0.8))
+                            .frame(width: 6, height: 6)
+                    }
                 }
             }
-            .padding(.vertical, 4)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.black)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.white.opacity(todo.isCompleted ? 0.03 : 0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(.white.opacity(0.1), lineWidth: 1)
+                    )
             )
             .offset(x: swipeOffset)
             .gesture(
