@@ -35,6 +35,9 @@ struct ModernSpeedContentView: View {
     @State private var suggestions: [String] = []
     @State private var selectedSuggestionIndex = -1
     
+    // Performance optimization: cache for todo filtering
+    @State private var todoCache: [String: [Todo]] = [:]
+    
     // Common task suggestions
     private let commonTasks = [
         "Buy groceries", "Exercise for 30 minutes", "Call dentist", "Pay bills",
@@ -93,11 +96,30 @@ struct ModernSpeedContentView: View {
         }
     }
     
-    /// Get todos for a specific date (used by calendar view)
+    /// Get todos for a specific date (used by calendar view) - memoized for performance
     private func todosForDate(_ date: Date) -> [Todo] {
-        return todos.filter { todo in
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let cacheKey = "\(dateFormatter.string(from: date))-\(todos.count)-\(todos.hashValue)"
+        
+        // Check cache first
+        if let cachedTodos = todoCache[cacheKey] {
+            return cachedTodos
+        }
+        
+        // Calculate and cache result
+        let result = todos.filter { todo in
             shouldTodoAppearOnDate(todo, date: date)
         }.sorted(by: { !$0.isCompleted && $1.isCompleted })
+        
+        todoCache[cacheKey] = result
+        
+        // Clean cache if it gets too big
+        if todoCache.count > 50 {
+            todoCache.removeAll()
+        }
+        
+        return result
     }
     
     var body: some View {
@@ -124,6 +146,14 @@ struct ModernSpeedContentView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .focusEffectDisabled()
+        .focusable(currentView == .calendar)
+        .onKeyPress { keyPress in
+            if currentView == .calendar {
+                return handleCalendarKeyPress(keyPress)
+            }
+            return .ignored
+        }
         .onAppear {
             // Set the model context for AI task creation
             taskCreationViewModel.updateModelContext(modelContext)
@@ -317,13 +347,6 @@ struct ModernSpeedContentView: View {
                 }
             )
         }
-        .focusable()
-        .onKeyPress { keyPress in
-            if currentView == .calendar {
-                return handleCalendarKeyPress(keyPress)
-            }
-            return .ignored
-        }
     }
     
     // MARK: - Speed Todo List  
@@ -406,7 +429,12 @@ struct ModernSpeedContentView: View {
                         }
                         .onChange(of: quickInput) { oldValue, newValue in
                             taskCreationViewModel.input = newValue
-                            updateSuggestions(for: newValue)
+                            // Only update suggestions if input is meaningful
+                            if newValue.count > 2 {
+                                updateSuggestions(for: newValue)
+                            } else {
+                                suggestions = []
+                            }
                         }
                     
                     if !quickInput.isEmpty {
@@ -1162,10 +1190,9 @@ struct ModernCalendarGrid: View {
                         )
                 )
         )
+        .contentShape(Rectangle())
         .onTapGesture {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                selectedDate = date
-            }
+            selectedDate = date
         }
         .onLongPressGesture {
             // Long press to add task for this day
