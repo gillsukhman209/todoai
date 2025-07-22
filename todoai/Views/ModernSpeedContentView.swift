@@ -9,6 +9,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import AppKit
 
 #if canImport(UIKit)
 import UIKit
@@ -30,6 +31,7 @@ struct ModernSpeedContentView: View {
         self._taskCreationViewModel = StateObject(wrappedValue: TaskCreationViewModel(openAIService: openAIService, modelContext: tempContainer.mainContext))
     }
     @FocusState private var isInputFocused: Bool
+    @FocusState private var isMainViewFocused: Bool
     
     // Smart suggestions
     @State private var suggestions: [String] = []
@@ -44,6 +46,7 @@ struct ModernSpeedContentView: View {
     @State private var editingTodoId: UUID? = nil
     @State private var editingText: String = ""
     @State private var keyboardMode: KeyboardMode = .input
+    @State private var needsFocusRestoration: Bool = false
     
     enum KeyboardMode {
         case input      // Typing in input field
@@ -342,7 +345,14 @@ struct ModernSpeedContentView: View {
         
         cancelEditingTodo()
         
-        // Focus management handled by main view
+        // Restore keyboard focus after editing completes
+        print("🔄 Restoring keyboard focus after editing")
+        needsFocusRestoration = true
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            needsFocusRestoration = false
+            print("🔄 Focus restoration complete")
+        }
     }
     
     /// Cancel editing and reset state
@@ -351,6 +361,11 @@ struct ModernSpeedContentView: View {
         editingTodoId = nil
         editingText = ""
         keyboardMode = .navigation
+        
+        // Restore focus to main view for keyboard navigation
+        DispatchQueue.main.async {
+            isMainViewFocused = true
+        }
     }
     
     /// Reset selection when view changes
@@ -445,13 +460,28 @@ struct ModernSpeedContentView: View {
         }
         .preferredColorScheme(.dark)
         .focusable(true)
+        .focused($isMainViewFocused)
         .onKeyPress { keyPress in
             return handleGlobalKeyPress(keyPress)
+        }
+        .onChange(of: needsFocusRestoration) { oldValue, newValue in
+            if newValue {
+                // Restore focus to main view for keyboard navigation
+                DispatchQueue.main.async {
+                    print("🔄 Restoring focus to main view")
+                    isMainViewFocused = true
+                }
+            }
         }
         .onAppear {
             // Set the model context for AI task creation
             taskCreationViewModel.updateModelContext(modelContext)
             taskCreationViewModel.updateSelectedDate(selectedDate)
+            
+            // Ensure main view has focus for keyboard navigation
+            DispatchQueue.main.async {
+                isMainViewFocused = true
+            }
             
             // Force save any pending changes on app startup
             saveContext()
@@ -509,6 +539,10 @@ struct ModernSpeedContentView: View {
             } else if keyboardMode == .input {
                 print("🔄 Input unfocused - switching to navigation mode")
                 keyboardMode = .navigation
+                // Restore focus to main view for keyboard navigation
+                DispatchQueue.main.async {
+                    isMainViewFocused = true
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
@@ -826,6 +860,12 @@ struct ModernSpeedContentView: View {
                         .foregroundColor(.white)
                         .textFieldStyle(.plain)
                         .focused($isInputFocused)
+                        .onTapGesture {
+                            // Immediately clear selection when input is tapped
+                            print("🔄 Input tapped - immediately clearing selection and switching to input mode")
+                            selectedTodoId = nil
+                            keyboardMode = .input
+                        }
                         .onSubmit {
                             createTodoWithAI()
                         }
@@ -1168,6 +1208,8 @@ struct ModernSpeedContentView: View {
                     if keyboardMode == .input {
                         print("🔑 Switching to navigation mode")
                         keyboardMode = .navigation
+                        // Restore focus to main view for keyboard navigation
+                        isMainViewFocused = true
                         // Select last todo if none selected
                         if selectedTodoId == nil {
                             let todos = navigableTodos
@@ -1200,6 +1242,8 @@ struct ModernSpeedContentView: View {
                     if keyboardMode == .input {
                         print("🔑 Switching to navigation mode")
                         keyboardMode = .navigation
+                        // Restore focus to main view for keyboard navigation
+                        isMainViewFocused = true
                         // Select first todo if none selected
                         if selectedTodoId == nil {
                             let todos = navigableTodos
@@ -1225,31 +1269,52 @@ struct ModernSpeedContentView: View {
             return .ignored
             
         case .return:
-            // Only handle Enter for todo completion if in navigation mode
-            if keyboardMode == .navigation {
-                print("🔑 Enter key in navigation mode - toggling completion")
+            // Allow action only in navigation mode with a selected todo (not while editing)
+            if keyboardMode == .navigation && selectedTodoId != nil {
+                print("🔑 Enter key: Toggling completion (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
                 toggleSelectedTodoCompletion()
                 return .handled
             } else {
-                print("🔑 Enter key in \(keyboardMode) mode - ignoring")
+                print("🔑 Enter key: Ignoring (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
                 return .ignored
             }
             
         case .delete:
-            deleteSelectedTodo()
-            return .handled
+            // Allow action only in navigation mode with a selected todo (not while editing or in input)
+            if keyboardMode == .navigation && selectedTodoId != nil {
+                print("🔑 Delete key: Deleting todo (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                deleteSelectedTodo()
+                return .handled
+            } else {
+                print("🔑 Delete key: Ignoring (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                return .ignored
+            }
             
         default:
             // Check for Cmd+E
             if keyPress.modifiers.contains(.command) && keyPress.characters == "e" {
-                startEditingSelectedTodo()
-                return .handled
+                // Allow action only in navigation mode with a selected todo (not while editing or in input)
+                if keyboardMode == .navigation && selectedTodoId != nil {
+                    print("🔑 Cmd+E: Starting edit (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                    startEditingSelectedTodo()
+                    return .handled
+                } else {
+                    print("🔑 Cmd+E: Ignoring (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                    return .ignored
+                }
             }
             
             // Check for backspace (character code 7F)
             if keyPress.characters == "\u{7F}" {
-                deleteSelectedTodo()
-                return .handled
+                // Allow action only in navigation mode with a selected todo (not while editing or in input)
+                if keyboardMode == .navigation && selectedTodoId != nil {
+                    print("🔑 Backspace: Deleting todo (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                    deleteSelectedTodo()
+                    return .handled
+                } else {
+                    print("🔑 Backspace: Ignoring (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                    return .ignored
+                }
             }
             
             // Delegate to calendar handler for other keys in calendar view
@@ -1333,31 +1398,52 @@ struct ModernSpeedContentView: View {
             }
             
         case .return:
-            // Only handle Enter for todo completion if in navigation mode
-            if keyboardMode == .navigation {
-                print("🔑 Calendar Enter key in navigation mode - toggling completion")
+            // Allow action only in navigation mode with a selected todo (not while editing or in input)
+            if keyboardMode == .navigation && selectedTodoId != nil {
+                print("🔑 Calendar Enter key: Toggling completion (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
                 toggleSelectedTodoCompletion()
                 return .handled
             } else {
-                print("🔑 Calendar Enter key in \(keyboardMode) mode - ignoring")
+                print("🔑 Calendar Enter key: Ignoring (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
                 return .ignored
             }
             
         case .delete:
-            deleteSelectedTodo()
-            return .handled
+            // Allow action only in navigation mode with a selected todo (not while editing or in input)
+            if keyboardMode == .navigation && selectedTodoId != nil {
+                print("🔑 Calendar Delete: Deleting todo (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                deleteSelectedTodo()
+                return .handled
+            } else {
+                print("🔑 Calendar Delete: Ignoring (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                return .ignored
+            }
             
         default:
             // Check for Cmd+E
             if keyPress.modifiers.contains(.command) && keyPress.characters == "e" {
-                startEditingSelectedTodo()
-                return .handled
+                // Allow action only in navigation mode with a selected todo (not while editing or in input)
+                if keyboardMode == .navigation && selectedTodoId != nil {
+                    print("🔑 Calendar Cmd+E: Starting edit (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                    startEditingSelectedTodo()
+                    return .handled
+                } else {
+                    print("🔑 Calendar Cmd+E: Ignoring (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                    return .ignored
+                }
             }
             
             // Check for backspace (character code 7F)
             if keyPress.characters == "\u{7F}" {
-                deleteSelectedTodo()
-                return .handled
+                // Allow action only in navigation mode with a selected todo (not while editing or in input)
+                if keyboardMode == .navigation && selectedTodoId != nil {
+                    print("🔑 Calendar Backspace: Deleting todo (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                    deleteSelectedTodo()
+                    return .handled
+                } else {
+                    print("🔑 Calendar Backspace: Ignoring (mode=\(keyboardMode), selected=\(selectedTodoId != nil))")
+                    return .ignored
+                }
             }
             
             return .ignored
