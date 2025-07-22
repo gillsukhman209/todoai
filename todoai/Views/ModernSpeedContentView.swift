@@ -83,7 +83,7 @@ struct ModernSpeedContentView: View {
     private var todayTodos: [Todo] {
         let today = Date()
         return todos.filter { todo in
-            shouldTodoAppearOnDate(todo, date: today)
+            shouldTodoAppearOnDate(todo, date: today, includeCompleted: true)
         }.sorted(by: { !$0.isCompleted && $1.isCompleted })
     }
     
@@ -95,7 +95,7 @@ struct ModernSpeedContentView: View {
             // Check each day in the next week
             for dayOffset in 1...7 {
                 if let date = calendar.date(byAdding: .day, value: dayOffset, to: today),
-                   shouldTodoAppearOnDate(todo, date: date) {
+                   shouldTodoAppearOnDate(todo, date: date, includeCompleted: false) {
                     return true
                 }
             }
@@ -114,7 +114,7 @@ struct ModernSpeedContentView: View {
             guard let date = calendar.date(byAdding: .day, value: dayOffset, to: today) else { continue }
             
             let todosForDate = todos.filter { todo in
-                shouldTodoAppearOnDate(todo, date: date)
+                shouldTodoAppearOnDate(todo, date: date, includeCompleted: false)
             }.sorted { first, second in
                 // Sort by time if available, then by creation date
                 if let firstTime = first.dueTime, let secondTime = second.dueTime {
@@ -152,9 +152,9 @@ struct ModernSpeedContentView: View {
             return cachedTodos
         }
         
-        // Calculate and cache result
+        // Calculate and cache result - calendar view shows all todos including completed
         let result = todos.filter { todo in
-            shouldTodoAppearOnDate(todo, date: date)
+            shouldTodoAppearOnDate(todo, date: date, includeCompleted: true)
         }.sorted(by: { !$0.isCompleted && $1.isCompleted })
         
         todoCache[cacheKey] = result
@@ -974,7 +974,7 @@ struct ModernSpeedContentView: View {
     // MARK: - Recurring Task Logic
     
     /// Helper function to determine if a todo should appear on a specific date
-    private func shouldTodoAppearOnDate(_ todo: Todo, date: Date) -> Bool {
+    private func shouldTodoAppearOnDate(_ todo: Todo, date: Date, includeCompleted: Bool = false) -> Bool {
         let calendar = Calendar.current
         
         // First check basic appearance logic
@@ -1002,8 +1002,8 @@ struct ModernSpeedContentView: View {
             return false
         }
         
-        // Phase 4 Enhancement: Hide todos that are completed on this specific date
-        if todo.isCompletedOnDate(date) {
+        // Hide todos that are completed on this specific date (only if includeCompleted is false)
+        if !includeCompleted && todo.isCompletedOnDate(date) {
             return false
         }
         
@@ -1079,21 +1079,26 @@ struct ModernTodoCard: View {
     
     var body: some View {
         HStack(spacing: 16) {
-            // Completion circle
-            Button(action: onComplete) {
-                ZStack {
-                    Circle()
-                        .stroke(todo.isCompleted ? .green : .white.opacity(0.3), lineWidth: 2)
-                        .frame(width: 24, height: 24)
-                    
-                    if todo.isCompleted {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.green)
-                    }
+            // Completion circle - with explicit tap gesture to ensure it works
+            ZStack {
+                Circle()
+                    .stroke(todo.isCompleted ? .green : .white.opacity(0.3), lineWidth: 2)
+                    .frame(width: 24, height: 24)
+                
+                if todo.isCompleted {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.green)
                 }
             }
-            .buttonStyle(.plain)
+            .frame(width: 32, height: 32) // Larger hit area
+            .contentShape(Circle()) // Ensure entire area is tappable
+            .onTapGesture {
+                print("🟢 Bubble tapped for todo: \(todo.title)")
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    onComplete()
+                }
+            }
             
             // Todo content
             VStack(alignment: .leading, spacing: 4) {
@@ -1153,15 +1158,21 @@ struct ModernTodoCard: View {
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .offset(x: swipeOffset)
         .gesture(
-            DragGesture()
+            DragGesture(minimumDistance: 15)
                 .onChanged { value in
-                    swipeOffset = value.translation.width * 0.5
+                    // Only start swiping if the drag starts from the right side (not on the button)
+                    if value.startLocation.x > 50 {
+                        swipeOffset = value.translation.width * 0.5
+                    }
                 }
                 .onEnded { value in
-                    if value.translation.width > 100 {
-                        onComplete()
-                    } else if value.translation.width < -100 {
-                        onDelete()
+                    // Only complete swipe actions if drag started from the right side
+                    if value.startLocation.x > 50 {
+                        if value.translation.width > 100 {
+                            onComplete()
+                        } else if value.translation.width < -100 {
+                            onDelete()
+                        }
                     }
                     
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -1182,15 +1193,6 @@ struct ModernTodoCard: View {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
             }
-        }
-        .onLongPressGesture {
-            // Trigger scheduling view on long press
-            #if canImport(UIKit)
-            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-            impactFeedback.prepare()
-            impactFeedback.impactOccurred()
-            #endif
-            onSchedule()
         }
     }
 }
