@@ -30,6 +30,7 @@ struct ModernSpeedContentView: View {
         self._taskCreationViewModel = StateObject(wrappedValue: TaskCreationViewModel(openAIService: openAIService, modelContext: tempContainer.mainContext))
     }
     @FocusState private var isInputFocused: Bool
+    @FocusState private var isTodoListFocused: Bool
     
     // Smart suggestions
     @State private var suggestions: [String] = []
@@ -37,6 +38,12 @@ struct ModernSpeedContentView: View {
     
     // Performance optimization: cache for todo filtering
     @State private var todoCache: [String: [Todo]] = [:]
+    
+    // MARK: - Keyboard Navigation State
+    @State private var selectedTodoId: UUID? = nil
+    @State private var isEditingTodo: Bool = false
+    @State private var editingTodoId: UUID? = nil
+    @State private var editingText: String = ""
     
     // Safety system for keyboard shortcuts
     private var isAnyTextInputActive: Bool {
@@ -46,10 +53,8 @@ struct ModernSpeedContentView: View {
         // Check if quickInput has content (user might be typing)
         if !quickInput.isEmpty { return true }
         
-        // TODO: Add checks for other text input states when implementing inline editing
-        // - Check editing states from other views
-        // - Check modal text inputs
-        // - Check system text selection
+        // Check if currently editing a todo
+        if isEditingTodo { return true }
         
         return false
     }
@@ -141,6 +146,32 @@ struct ModernSpeedContentView: View {
         }
     }
     
+    // MARK: - Keyboard Navigation Helpers
+    
+    /// Get the todos list to navigate based on current view
+    private var navigableTodos: [Todo] {
+        switch currentView {
+        case .calendar:
+            // In calendar view, navigate through todos for selected date
+            return todosForDate(selectedDate)
+        case .today, .upcoming, .all:
+            // For other views, use the display todos
+            return displayTodos
+        }
+    }
+    
+    /// Get the currently selected todo
+    private var selectedTodo: Todo? {
+        guard let id = selectedTodoId else { return nil }
+        return navigableTodos.first { $0.id == id }
+    }
+    
+    /// Get the index of the currently selected todo
+    private var selectedTodoIndex: Int? {
+        guard let id = selectedTodoId else { return nil }
+        return navigableTodos.firstIndex { $0.id == id }
+    }
+    
     /// Get todos for a specific date (used by calendar view) - memoized for performance
     private func todosForDate(_ date: Date) -> [Todo] {
         let dateFormatter = DateFormatter()
@@ -165,6 +196,113 @@ struct ModernSpeedContentView: View {
         }
         
         return result
+    }
+    
+    // MARK: - Keyboard Navigation Methods
+    
+    /// Move selection up in the todo list
+    private func navigateUp() {
+        guard !isAnyTextInputActive else { return }
+        
+        let todos = navigableTodos
+        guard !todos.isEmpty else { return }
+        
+        if let currentIndex = selectedTodoIndex {
+            // Move to previous todo, wrap to bottom if at top
+            let newIndex = currentIndex > 0 ? currentIndex - 1 : todos.count - 1
+            selectedTodoId = todos[newIndex].id
+        } else {
+            // No selection, select last todo
+            selectedTodoId = todos.last?.id
+        }
+    }
+    
+    /// Move selection down in the todo list
+    private func navigateDown() {
+        guard !isAnyTextInputActive else { return }
+        
+        let todos = navigableTodos
+        guard !todos.isEmpty else { return }
+        
+        if let currentIndex = selectedTodoIndex {
+            // Move to next todo, wrap to top if at bottom
+            let newIndex = currentIndex < todos.count - 1 ? currentIndex + 1 : 0
+            selectedTodoId = todos[newIndex].id
+        } else {
+            // No selection, select first todo
+            selectedTodoId = todos.first?.id
+        }
+    }
+    
+    /// Delete the currently selected todo
+    private func deleteSelectedTodo() {
+        guard !isAnyTextInputActive,
+              let todo = selectedTodo else { return }
+        
+        withAnimation(.easeOut(duration: 0.3)) {
+            modelContext.delete(todo)
+            saveTodoChanges()
+            
+            // Clear selection since the todo is deleted
+            selectedTodoId = nil
+        }
+    }
+    
+    /// Toggle completion of the currently selected todo
+    private func toggleSelectedTodoCompletion() {
+        guard !isAnyTextInputActive,
+              let todo = selectedTodo else { return }
+        
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            if currentView == .calendar {
+                // For calendar view, toggle completion on selected date
+                todo.toggleCompletionOnDate(selectedDate)
+            } else {
+                // For other views, toggle overall completion
+                todo.isCompleted.toggle()
+            }
+            saveTodoChanges()
+        }
+    }
+    
+    /// Start editing the currently selected todo
+    private func startEditingSelectedTodo() {
+        guard !isAnyTextInputActive,
+              let todo = selectedTodo else { return }
+        
+        editingTodoId = todo.id
+        editingText = todo.title
+        isEditingTodo = true
+    }
+    
+    /// Save the edited todo text
+    private func saveEditedTodo() {
+        guard let todoId = editingTodoId,
+              let todo = todos.first(where: { $0.id == todoId }) else {
+            cancelEditingTodo()
+            return
+        }
+        
+        let trimmedText = editingText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedText.isEmpty {
+            todo.title = trimmedText
+            saveTodoChanges()
+        }
+        
+        cancelEditingTodo()
+    }
+    
+    /// Cancel editing and reset state
+    private func cancelEditingTodo() {
+        isEditingTodo = false
+        editingTodoId = nil
+        editingText = ""
+    }
+    
+    /// Reset selection when view changes
+    private func resetSelection() {
+        selectedTodoId = nil
+        cancelEditingTodo()
     }
     
     // MARK: - Persistence Helpers
@@ -232,6 +370,16 @@ struct ModernSpeedContentView: View {
                 
                 // Content area - Calendar, Timeline, or Todo List - This should expand
                 ZStack {
+                    // Invisible focusable area for keyboard navigation
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .focusable()
+                        .focused($isTodoListFocused)
+                        .onTapGesture {
+                            isTodoListFocused = true
+                        }
+                    
                     if currentView == .calendar {
                         modernCalendarView
                     } else if currentView == .upcoming {
@@ -251,7 +399,7 @@ struct ModernSpeedContentView: View {
         }
         .preferredColorScheme(.dark)
         .focusEffectDisabled()
-        .focusable(currentView == .calendar)
+        .focusable(true)
         .onKeyPress { keyPress in
             return handleGlobalKeyPress(keyPress)
         }
@@ -265,6 +413,9 @@ struct ModernSpeedContentView: View {
             
             // Verify database status and log diagnostics
             verifyDatabaseStatus()
+            
+            // Focus the list area by default
+            isTodoListFocused = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusTaskInput)) { _ in
             // Handle Command+N from menu
@@ -300,6 +451,10 @@ struct ModernSpeedContentView: View {
             if currentView == .calendar {
                 taskCreationViewModel.updateSelectedDate(newValue)
             }
+        }
+        .onChange(of: currentView) { oldValue, newValue in
+            // Reset keyboard navigation selection when switching views
+            resetSelection()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             // Save data when app goes to background
@@ -554,6 +709,15 @@ struct ModernSpeedContentView: View {
                         },
                         onSchedule: {
                             // Scheduling functionality removed
+                        },
+                        isSelected: selectedTodoId == todo.id,
+                        isEditing: isEditingTodo && editingTodoId == todo.id,
+                        editingText: $editingText,
+                        onSaveEdit: saveEditedTodo,
+                        onCancelEdit: cancelEditingTodo,
+                        onSelect: {
+                            selectedTodoId = todo.id
+                            isTodoListFocused = true
                         }
                     )
                 }
@@ -908,12 +1072,71 @@ struct ModernSpeedContentView: View {
     // MARK: - Keyboard Navigation
     
     private func handleGlobalKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
-        // Delegate calendar navigation to existing handler when in calendar view
-        if currentView == .calendar {
-            return handleCalendarKeyPress(keyPress)
+        print("🔑 Key pressed: \(keyPress.key)")
+        print("🔑 Input focused: \(isInputFocused), List focused: \(isTodoListFocused)")
+        print("🔑 Any text active: \(isAnyTextInputActive)")
+        
+        // Handle editing shortcuts first (if in edit mode)
+        if isEditingTodo {
+            switch keyPress.key {
+            case .return:
+                saveEditedTodo()
+                return .handled
+            case .escape:
+                cancelEditingTodo()
+                return .handled
+            default:
+                return .ignored
+            }
         }
         
-        return .ignored
+        // Handle general keyboard navigation
+        switch keyPress.key {
+        case .upArrow:
+            if currentView == .calendar {
+                return handleCalendarKeyPress(keyPress)
+            } else {
+                navigateUp()
+                return .handled
+            }
+            
+        case .downArrow:
+            if currentView == .calendar {
+                return handleCalendarKeyPress(keyPress)
+            } else {
+                navigateDown()
+                return .handled
+            }
+            
+        case .leftArrow, .rightArrow:
+            // Only handle left/right for calendar view
+            if currentView == .calendar {
+                return handleCalendarKeyPress(keyPress)
+            }
+            return .ignored
+            
+        case .return:
+            toggleSelectedTodoCompletion()
+            return .handled
+            
+        case .delete:
+            deleteSelectedTodo()
+            return .handled
+            
+        default:
+            // Check for Cmd+E
+            if keyPress.modifiers.contains(.command) && keyPress.characters == "e" {
+                startEditingSelectedTodo()
+                return .handled
+            }
+            
+            // Delegate to calendar handler for other keys in calendar view
+            if currentView == .calendar {
+                return handleCalendarKeyPress(keyPress)
+            }
+            
+            return .ignored
+        }
     }
     
     private func handleCalendarKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
@@ -924,6 +1147,8 @@ struct ModernSpeedContentView: View {
             if let previousDay = calendar.date(byAdding: .day, value: -1, to: selectedDate) {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     selectedDate = previousDay
+                    // Reset todo selection when changing dates
+                    selectedTodoId = nil
                     // Update current month if we moved to a different month
                     if !calendar.isDate(previousDay, equalTo: currentMonth, toGranularity: .month) {
                         currentMonth = previousDay
@@ -936,6 +1161,8 @@ struct ModernSpeedContentView: View {
             if let nextDay = calendar.date(byAdding: .day, value: 1, to: selectedDate) {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     selectedDate = nextDay
+                    // Reset todo selection when changing dates
+                    selectedTodoId = nil
                     // Update current month if we moved to a different month
                     if !calendar.isDate(nextDay, equalTo: currentMonth, toGranularity: .month) {
                         currentMonth = nextDay
@@ -945,28 +1172,57 @@ struct ModernSpeedContentView: View {
             return .handled
             
         case .upArrow:
-            if let previousWeek = calendar.date(byAdding: .day, value: -7, to: selectedDate) {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    selectedDate = previousWeek
-                    if !calendar.isDate(previousWeek, equalTo: currentMonth, toGranularity: .month) {
-                        currentMonth = previousWeek
+            // If shift is held, navigate through todos on current date
+            if keyPress.modifiers.contains(.shift) {
+                navigateUp()
+                return .handled
+            } else {
+                // Otherwise navigate to previous week
+                if let previousWeek = calendar.date(byAdding: .day, value: -7, to: selectedDate) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        selectedDate = previousWeek
+                        selectedTodoId = nil
+                        if !calendar.isDate(previousWeek, equalTo: currentMonth, toGranularity: .month) {
+                            currentMonth = previousWeek
+                        }
                     }
                 }
+                return .handled
             }
-            return .handled
             
         case .downArrow:
-            if let nextWeek = calendar.date(byAdding: .day, value: 7, to: selectedDate) {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    selectedDate = nextWeek
-                    if !calendar.isDate(nextWeek, equalTo: currentMonth, toGranularity: .month) {
-                        currentMonth = nextWeek
+            // If shift is held, navigate through todos on current date
+            if keyPress.modifiers.contains(.shift) {
+                navigateDown()
+                return .handled
+            } else {
+                // Otherwise navigate to next week
+                if let nextWeek = calendar.date(byAdding: .day, value: 7, to: selectedDate) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        selectedDate = nextWeek
+                        selectedTodoId = nil
+                        if !calendar.isDate(nextWeek, equalTo: currentMonth, toGranularity: .month) {
+                            currentMonth = nextWeek
+                        }
                     }
                 }
+                return .handled
             }
+            
+        case .return:
+            toggleSelectedTodoCompletion()
+            return .handled
+            
+        case .delete:
+            deleteSelectedTodo()
             return .handled
             
         default:
+            // Check for Cmd+E
+            if keyPress.modifiers.contains(.command) && keyPress.characters == "e" {
+                startEditingSelectedTodo()
+                return .handled
+            }
             return .ignored
         }
     }
@@ -1074,8 +1330,17 @@ struct ModernTodoCard: View {
     let onDelete: () -> Void
     let onSchedule: () -> Void
     
+    // MARK: - Keyboard Navigation Properties
+    let isSelected: Bool
+    let isEditing: Bool
+    @Binding var editingText: String
+    let onSaveEdit: () -> Void
+    let onCancelEdit: () -> Void
+    let onSelect: () -> Void
+    
     @State private var isPressed = false
     @State private var swipeOffset: CGFloat = 0
+    @FocusState private var isEditFieldFocused: Bool
     
     var body: some View {
         HStack(spacing: 16) {
@@ -1102,11 +1367,27 @@ struct ModernTodoCard: View {
             
             // Todo content
             VStack(alignment: .leading, spacing: 4) {
-                Text(todo.title)
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundColor(todo.isCompleted ? .white.opacity(0.5) : .white)
-                    .strikethrough(todo.isCompleted, color: .white.opacity(0.5))
-                    .lineLimit(3)
+                if isEditing {
+                    // Edit mode: show text field
+                    TextField("Todo title", text: $editingText)
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(.white)
+                        .textFieldStyle(.plain)
+                        .focused($isEditFieldFocused)
+                        .onSubmit {
+                            onSaveEdit()
+                        }
+                        .onAppear {
+                            isEditFieldFocused = true
+                        }
+                } else {
+                    // Normal mode: show text
+                    Text(todo.title)
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(todo.isCompleted ? .white.opacity(0.5) : .white)
+                        .strikethrough(todo.isCompleted, color: .white.opacity(0.5))
+                        .lineLimit(3)
+                }
                 
                 // Show scheduling information
                 if !todo.scheduleDescription.isEmpty {
@@ -1149,10 +1430,10 @@ struct ModernTodoCard: View {
         .padding(.vertical, 16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.white.opacity(todo.isCompleted ? 0.03 : 0.08))
+                .fill(backgroundFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(.white.opacity(0.1), lineWidth: 1)
+                        .stroke(borderColor, lineWidth: isSelected ? 2 : 1)
                 )
         )
         .scaleEffect(isPressed ? 0.98 : 1.0)
@@ -1182,6 +1463,9 @@ struct ModernTodoCard: View {
         )
         .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isPressed)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: swipeOffset)
+        .onTapGesture {
+            onSelect()
+        }
         .contextMenu {
             Button(action: onComplete) {
                 Label(todo.isCompleted ? "Mark Incomplete" : "Mark Complete", 
@@ -1193,6 +1477,24 @@ struct ModernTodoCard: View {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
             }
+        }
+    }
+    
+    // MARK: - Visual State Helpers
+    
+    private var backgroundFill: Color {
+        if isSelected {
+            return isEditing ? .cyan.opacity(0.15) : .cyan.opacity(0.08)
+        } else {
+            return .white.opacity(todo.isCompleted ? 0.03 : 0.08)
+        }
+    }
+    
+    private var borderColor: Color {
+        if isSelected {
+            return isEditing ? .cyan.opacity(0.8) : .cyan.opacity(0.5)
+        } else {
+            return .white.opacity(0.1)
         }
     }
 }
@@ -1736,7 +2038,16 @@ struct CompactTodoCard: View {
     let onComplete: () -> Void
     let onDelete: () -> Void
     
+    // MARK: - Keyboard Navigation Properties
+    let isSelected: Bool
+    let isEditing: Bool
+    @Binding var editingText: String
+    let onSaveEdit: () -> Void
+    let onCancelEdit: () -> Void
+    let onSelect: () -> Void
+    
     @State private var swipeOffset: CGFloat = 0
+    @FocusState private var isEditFieldFocused: Bool
     
     private var timeDisplay: String {
         if let dueTime = todo.dueTime {
@@ -1784,11 +2095,27 @@ struct CompactTodoCard: View {
             
             // Todo content
             VStack(alignment: .leading, spacing: 2) {
-                Text(todo.title)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(todo.isCompletedOnDate(date) ? .white.opacity(0.5) : .white)
-                    .strikethrough(todo.isCompletedOnDate(date), color: .white.opacity(0.5))
-                    .lineLimit(2)
+                if isEditing {
+                    // Edit mode: show text field
+                    TextField("Todo title", text: $editingText)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.white)
+                        .textFieldStyle(.plain)
+                        .focused($isEditFieldFocused)
+                        .onSubmit {
+                            onSaveEdit()
+                        }
+                        .onAppear {
+                            isEditFieldFocused = true
+                        }
+                } else {
+                    // Normal mode: show text
+                    Text(todo.title)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(todo.isCompletedOnDate(date) ? .white.opacity(0.5) : .white)
+                        .strikethrough(todo.isCompletedOnDate(date), color: .white.opacity(0.5))
+                        .lineLimit(2)
+                }
                 
                 if !timeDisplay.isEmpty {
                     HStack(spacing: 4) {
@@ -1830,10 +2157,10 @@ struct CompactTodoCard: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.white.opacity(todo.isCompletedOnDate(date) ? 0.03 : 0.06))
+                .fill(backgroundFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(.white.opacity(0.08), lineWidth: 1)
+                        .stroke(borderColor, lineWidth: isSelected ? 2 : 1)
                 )
         )
         .offset(x: swipeOffset)
@@ -1865,6 +2192,27 @@ struct CompactTodoCard: View {
                 }
         )
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: swipeOffset)
+        .onTapGesture {
+            onSelect()
+        }
+    }
+    
+    // MARK: - Visual State Helpers
+    
+    private var backgroundFill: Color {
+        if isSelected {
+            return isEditing ? .cyan.opacity(0.12) : .cyan.opacity(0.06)
+        } else {
+            return .white.opacity(todo.isCompletedOnDate(date) ? 0.03 : 0.06)
+        }
+    }
+    
+    private var borderColor: Color {
+        if isSelected {
+            return isEditing ? .cyan.opacity(0.6) : .cyan.opacity(0.4)
+        } else {
+            return .white.opacity(0.08)
+        }
     }
     
     private func priorityColor(for priority: TaskPriority) -> Color {
@@ -1999,7 +2347,15 @@ struct DaySection: View {
                             }
                             onToggleComplete(todo)
                         },
-                        onDelete: { onDeleteTodo(todo) }
+                        onDelete: { onDeleteTodo(todo) },
+                        isSelected: false, // TODO: Implement upcoming view keyboard navigation
+                        isEditing: false,
+                        editingText: .constant(""),
+                        onSaveEdit: {},
+                        onCancelEdit: {},
+                        onSelect: {
+                            // TODO: Implement selection in upcoming view
+                        }
                     )
                     .padding(.leading, 40) // Align with timeline
                 }
