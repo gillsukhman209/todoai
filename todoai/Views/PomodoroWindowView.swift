@@ -2,188 +2,408 @@ import SwiftUI
 import AppKit
 
 struct PomodoroWindowView: View {
-    @StateObject private var pomodoroManager = PomodoroManager()
+    @ObservedObject var pomodoroManager: PomodoroManager
     @Environment(\.modelContext) private var modelContext
     @State private var window: NSWindow?
+    @State private var glowIntensity: Double = 0.8
+    @State private var particleOffset: CGFloat = 0
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Minimal modern header
-            HStack {
-                Text("Pomodoro")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                
-                Spacer()
-                
-                Button {
-                    window?.close()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.6))
-                        .frame(width: 24, height: 24)
-                        .background(.white.opacity(0.08))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 8)
+        ZStack {
+            // Futuristic background
+            futuristicBackground
             
-            // Compact modern timer display
-            VStack(spacing: 24) {
-                // Compact progress ring with glow
-                ZStack {
-                    Circle()
-                        .stroke(Color.white.opacity(0.08), lineWidth: 3)
-                        .frame(width: 180, height: 180)
-                        .background(
-                            Circle()
-                                .fill(.white.opacity(0.02))
-                                .frame(width: 180, height: 180)
-                        )
-                    
-                    Circle()
-                        .trim(from: 0, to: pomodoroManager.progress)
-                        .stroke(
+            VStack(spacing: 0) {
+                // Futuristic header
+                HStack {
+                    Text("Pomodoro")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundStyle(
                             LinearGradient(
-                                colors: [
-                                    Color(pomodoroManager.sessionTypeColor),
-                                    Color(pomodoroManager.sessionTypeColor).opacity(0.7)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                                colors: [.cyan, .blue, .purple],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
                         )
-                        .frame(width: 180, height: 180)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: pomodoroManager.progress)
-                        .shadow(color: Color(pomodoroManager.sessionTypeColor).opacity(0.4), radius: 8, x: 0, y: 0)
                     
-                    VStack(spacing: 6) {
-                        if let session = pomodoroManager.currentSession {
-                            Text(session.name)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
-                        }
-                        
-                        Text(pomodoroManager.formattedTimeRemaining)
-                            .font(.system(size: 32, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                            .contentTransition(.numericText())
-                        
-                        if pomodoroManager.isActive {
-                            HStack(spacing: 6) {
+                    Spacer()
+                    
+                    Button {
+                        window?.close()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.cyan)
+                            .frame(width: 22, height: 22)
+                            .background(
                                 Circle()
-                                    .fill(pomodoroManager.state == .paused ? .orange : .green)
-                                    .frame(width: 4, height: 4)
-                                    .scaleEffect(pomodoroManager.state == .paused ? 1.0 : 1.3)
-                                    .animation(.easeInOut(duration: 1).repeatForever(), value: pomodoroManager.state == .running)
-                                
-                                Text(pomodoroManager.state == .paused ? "Paused" : "Running")
+                                    .fill(.ultraThinMaterial)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(.cyan.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
+                            .shadow(color: .cyan.opacity(0.3), radius: 4)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                
+                // Futuristic compact timer
+                VStack(spacing: 20) {
+                    // Enhanced progress ring with multiple layers
+                    ZStack {
+                        // Outer glow ring
+                        Circle()
+                            .stroke(
+                                Color(pomodoroManager.sessionTypeColor).opacity(0.1),
+                                lineWidth: 12
+                            )
+                            .frame(width: 200, height: 200)
+                            .blur(radius: 6)
+                        
+                        // Background ring with subtle animation
+                        Circle()
+                            .stroke(
+                                backgroundRingGradient,
+                                lineWidth: 2
+                            )
+                            .frame(width: 180, height: 180)
+                            .rotationEffect(.degrees(particleOffset))
+                        
+                        // Main progress ring
+                        Circle()
+                            .trim(from: 0, to: pomodoroManager.progress)
+                            .stroke(
+                                progressRingGradient,
+                                style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                            )
+                            .frame(width: 180, height: 180)
+                            .rotationEffect(.degrees(-90))
+                            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: pomodoroManager.progress)
+                            .shadow(color: Color(pomodoroManager.sessionTypeColor), radius: 10)
+                            .shadow(color: .cyan.opacity(0.3), radius: 15)
+                        
+                        // Inner highlight ring
+                        Circle()
+                            .trim(from: 0, to: pomodoroManager.progress * 0.7)
+                            .stroke(
+                                .white.opacity(0.3),
+                                style: StrokeStyle(lineWidth: 1, lineCap: .round)
+                            )
+                            .frame(width: 160, height: 160)
+                            .rotationEffect(.degrees(-90))
+                            .animation(.spring(response: 0.4, dampingFraction: 0.9), value: pomodoroManager.progress)
+                        
+                        // Center content with futuristic styling
+                        VStack(spacing: 8) {
+                            if let session = pomodoroManager.currentSession {
+                                Text(session.name)
                                     .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
+                                    .foregroundStyle(sessionNameGradient)
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(2)
+                            }
+                            
+                            // Enhanced time display
+                            Text(pomodoroManager.formattedTimeRemaining)
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundStyle(timeDisplayGradient)
+                                .contentTransition(.numericText())
+                                .shadow(color: Color(pomodoroManager.sessionTypeColor), radius: 8)
+                                .shadow(color: .white.opacity(0.3), radius: 4)
+                            
+                            // Status indicator
+                            if pomodoroManager.isActive {
+                                HStack(spacing: 8) {
+                                    statusIndicator
+                                    statusText
+                                }
                             }
                         }
                     }
+                    
+                    // Futuristic controls
+                    if pomodoroManager.isActive {
+                        futuristicActiveControls
+                    } else {
+                        futuristicInactiveControls
+                    }
                 }
-                
-                // Compact modern controls
-                if pomodoroManager.isActive {
-                    compactActiveControls
-                } else {
-                    compactInactiveControls
-                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
         }
-        .background(.black)
         .onAppear {
-            pomodoroManager.setModelContext(modelContext)
             setupWindow()
+            startAnimations()
         }
         .background(WindowAccessor(window: $window))
     }
     
     @ViewBuilder
-    private var compactActiveControls: some View {
+    private var futuristicBackground: some View {
+        ZStack {
+            // Base black background
+            Color.black
+                .ignoresSafeArea()
+            
+            // Animated gradient overlay
+            LinearGradient(
+                colors: [
+                    .black,
+                    .purple.opacity(0.08),
+                    .cyan.opacity(0.04),
+                    .black
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            // Compact floating particles
+            ForEach(0..<8, id: \.self) { i in
+                Circle()
+                    .fill(particleGradient)
+                    .frame(width: CGFloat.random(in: 1...4), height: CGFloat.random(in: 1...4))
+                    .position(
+                        x: CGFloat.random(in: 0...320),
+                        y: CGFloat.random(in: 0...400) + particleOffset
+                    )
+                    .animation(.linear(duration: 15).repeatForever(autoreverses: false), value: particleOffset)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var statusIndicator: some View {
+        ZStack {
+            Circle()
+                .fill(pomodoroManager.state == PomodoroState.paused ? Color.orange : Color.green)
+                .frame(width: 6, height: 6)
+                .scaleEffect(glowIntensity)
+                .shadow(
+                    color: pomodoroManager.state == PomodoroState.paused ? .orange : .green,
+                    radius: 6
+                )
+            
+            Circle()
+                .stroke(
+                    (pomodoroManager.state == PomodoroState.paused ? Color.orange : Color.green).opacity(0.3),
+                    lineWidth: 0.5
+                )
+                .frame(width: 12, height: 12)
+                .scaleEffect(glowIntensity * 1.3)
+        }
+    }
+    
+    @ViewBuilder
+    private var statusText: some View {
+        Text(pomodoroManager.state == PomodoroState.paused ? "Paused" : "Running")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundColor(.white.opacity(0.8))
+    }
+    
+    @ViewBuilder
+    private var futuristicActiveControls: some View {
         HStack(spacing: 12) {
+            // Pause/Resume button
             Button {
-                if pomodoroManager.state == .running {
+                if pomodoroManager.state == PomodoroState.running {
                     pomodoroManager.pauseSession()
                 } else {
                     pomodoroManager.resumeSession()
                 }
             } label: {
-                Image(systemName: pomodoroManager.state == .running ? "pause.fill" : "play.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 36, height: 36)
-                    .background(.blue.opacity(0.9))
-                    .clipShape(Circle())
+                HStack(spacing: 8) {
+                    Image(systemName: pomodoroManager.state == PomodoroState.running ? "pause.fill" : "play.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text(pomodoroManager.state == PomodoroState.running ? "Pause" : "Resume")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .foregroundColor(.white)
+                .frame(height: 36)
+                .frame(minWidth: 80)
+                .background(pauseResumeGradient)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(.white.opacity(0.2), lineWidth: 0.5)
+                )
+                .shadow(color: .blue.opacity(0.4), radius: 8)
+                .shadow(color: .cyan.opacity(0.2), radius: 12)
             }
             .buttonStyle(.plain)
             
+            // Stop button
             Button {
                 pomodoroManager.stopSession()
             } label: {
-                Image(systemName: "stop.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 36, height: 36)
-                    .background(.red.opacity(0.9))
-                    .clipShape(Circle())
+                HStack(spacing: 8) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("Stop")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .foregroundColor(.white)
+                .frame(height: 36)
+                .frame(minWidth: 70)
+                .background(stopButtonGradient)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(.white.opacity(0.2), lineWidth: 0.5)
+                )
+                .shadow(color: .red.opacity(0.4), radius: 8)
+                .shadow(color: .orange.opacity(0.2), radius: 12)
             }
             .buttonStyle(.plain)
         }
     }
     
     @ViewBuilder
-    private var compactInactiveControls: some View {
-        VStack(spacing: 16) {
-            // Quick session buttons
+    private var futuristicInactiveControls: some View {
+        VStack(spacing: 12) {
+            // Quick start buttons
             HStack(spacing: 8) {
-                compactQuickButton("Work", type: .work, color: .red)
-                compactQuickButton("Break", type: .shortBreak, color: .green)
-                compactQuickButton("Long", type: .longBreak, color: .purple)
+                compactQuickButton("15m", duration: 15 * 60, colors: [.orange, .red])
+                compactQuickButton("25m", duration: 25 * 60, colors: [.red, .purple])
+                compactQuickButton("45m", duration: 45 * 60, colors: [.purple, .cyan])
             }
             
+            // Main start button
             Button("Start Focus Session") {
-                pomodoroManager.startSession(name: "Focus Session", type: .work)
+                pomodoroManager.startSession(name: "Focus Session", type: PomodoroType.work)
             }
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 12, weight: .bold))
             .foregroundColor(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(.red.opacity(0.9))
-            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .frame(height: 36)
+            .frame(maxWidth: .infinity)
+            .background(startButtonGradient)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(.white.opacity(0.2), lineWidth: 0.5)
+            )
+            .shadow(color: .red.opacity(0.3), radius: 10)
+            .shadow(color: .purple.opacity(0.2), radius: 15)
             .buttonStyle(.plain)
         }
     }
     
-    private func compactQuickButton(_ title: String, type: PomodoroType, color: Color) -> some View {
+    private func compactQuickButton(_ title: String, duration: TimeInterval, colors: [Color]) -> some View {
         Button {
-            pomodoroManager.startSession(name: title + " Session", type: type)
+            pomodoroManager.startCustomSession(name: "Quick Focus", duration: duration)
         } label: {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(color.opacity(0.2))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(color.opacity(0.4), lineWidth: 1)
-                )
+            VStack(spacing: 3) {
+                Text(title)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .frame(width: 50, height: 32)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                LinearGradient(
+                                    colors: colors.map { $0.opacity(0.4) },
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            )
+            .shadow(color: colors.first?.opacity(0.2) ?? .clear, radius: 6)
         }
         .buttonStyle(.plain)
+    }
+    
+    // Computed gradients
+    private var backgroundRingGradient: LinearGradient {
+        LinearGradient(
+            colors: [.white.opacity(0.08), .white.opacity(0.04)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    private var progressRingGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(pomodoroManager.sessionTypeColor),
+                Color(pomodoroManager.sessionTypeColor).opacity(0.8),
+                .cyan,
+                .purple
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    private var sessionNameGradient: LinearGradient {
+        LinearGradient(
+            colors: [.white, .cyan.opacity(0.8)],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+    
+    private var timeDisplayGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                .white,
+                Color(pomodoroManager.sessionTypeColor),
+                .cyan
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    private var particleGradient: LinearGradient {
+        LinearGradient(
+            colors: [.cyan.opacity(0.2), .purple.opacity(0.1)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    private var pauseResumeGradient: LinearGradient {
+        LinearGradient(
+            colors: [.blue, .cyan],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    private var stopButtonGradient: LinearGradient {
+        LinearGradient(
+            colors: [.red, .orange],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    private var startButtonGradient: LinearGradient {
+        LinearGradient(
+            colors: [.red, .purple, .cyan],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    private func startAnimations() {
+        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            withAnimation(.easeInOut(duration: 1)) {
+                glowIntensity = Double.random(in: 0.6...1.2)
+                particleOffset += 0.5
+            }
+        }
     }
     
     private func setupWindow() {
@@ -193,7 +413,7 @@ struct PomodoroWindowView: View {
                 window.level = .floating
                 window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
                 window.styleMask.remove(.resizable)
-                window.setContentSize(NSSize(width: 320, height: 380))
+                window.setContentSize(NSSize(width: 280, height: 360))
                 window.title = "Pomodoro Timer"
                 
                 // Make window more modern
@@ -229,5 +449,5 @@ struct WindowAccessor: NSViewRepresentable {
 }
 
 #Preview {
-    PomodoroWindowView()
+    PomodoroWindowView(pomodoroManager: PomodoroManager())
 }

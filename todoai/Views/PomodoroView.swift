@@ -557,7 +557,7 @@ struct PomodoroView: View {
         )
         
         window.title = "Pomodoro Timer"
-        window.contentView = NSHostingView(rootView: PomodoroWindowView().environment(\.modelContext, modelContext))
+        window.contentView = NSHostingView(rootView: PomodoroWindowView(pomodoroManager: pomodoroManager).environment(\.modelContext, modelContext))
         window.center()
         window.orderFront(nil)
         window.makeKey()
