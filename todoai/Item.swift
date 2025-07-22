@@ -35,6 +35,7 @@ final class Todo: Identifiable, Transferable {
     var priority: TaskPriority? // Task priority level (optional for migration)
     var category: TaskCategory? // Task category for organization (optional for migration)
     var completionDates: [Date] = [] // Track individual completions for recurring tasks
+    var deletedDates: [Date] = [] // Track dates where recurring todo is hidden/deleted
     
     // MARK: - Computed Properties
     var isRecurring: Bool {
@@ -144,6 +145,49 @@ final class Todo: Identifiable, Transferable {
         let alreadyCompleted = completionDates.contains { calendar.isDate($0, inSameDayAs: date) }
         if !alreadyCompleted {
             completionDates.append(calendar.startOfDay(for: date))
+        }
+    }
+    
+    /// Check if this todo is deleted/hidden on a specific date (for recurring tasks)
+    func isDeletedOnDate(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        return deletedDates.contains { calendar.isDate($0, inSameDayAs: date) }
+    }
+    
+    /// Mark todo as deleted/hidden on a specific date (for recurring tasks)
+    func markDeletedOnDate(_ date: Date) {
+        let calendar = Calendar.current
+        
+        // For recurring todos, add the date to deletedDates if not already there
+        let alreadyDeleted = deletedDates.contains { calendar.isDate($0, inSameDayAs: date) }
+        if !alreadyDeleted {
+            deletedDates.append(calendar.startOfDay(for: date))
+        }
+    }
+    
+    /// Remove todo from deleted dates (restore it for a specific date)
+    func restoreOnDate(_ date: Date) {
+        let calendar = Calendar.current
+        deletedDates.removeAll { calendar.isDate($0, inSameDayAs: date) }
+    }
+    
+    /// Toggle completion status for a specific date (smart toggle for recurring tasks)
+    func toggleCompletionOnDate(_ date: Date) {
+        let calendar = Calendar.current
+        
+        // For simple todos, toggle overall completion
+        if !isRecurring {
+            isCompleted.toggle()
+            return
+        }
+        
+        // For recurring todos, toggle completion for this specific date
+        if isCompletedOnDate(date) {
+            // Remove from completion dates
+            completionDates.removeAll { calendar.isDate($0, inSameDayAs: date) }
+        } else {
+            // Add to completion dates
+            markCompletedOnDate(date)
         }
     }
     

@@ -20,36 +20,52 @@ struct todoaiApp: App {
     
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([Todo.self, TimeRange.self, RecurrenceConfig.self])
-            let modelConfiguration = ModelConfiguration(
+        let modelConfiguration = ModelConfiguration(
             schema: schema,
-            isStoredInMemoryOnly: false
+            isStoredInMemoryOnly: false,
+            allowsSave: true,
+            cloudKitDatabase: .none
         )
         
         do {
             return try ModelContainer(for: schema, configurations: modelConfiguration)
         } catch {
             print("Failed to create ModelContainer: \(error)")
-            // Create directory if it doesn't exist
+            
+            // Try deleting the old database for migration
             let url = URL.applicationSupportDirectory.appendingPathComponent("todoai")
+            let dbURL = url.appendingPathComponent("TodoDB.sqlite")
+            
+            // Remove old database files
+            try? FileManager.default.removeItem(at: dbURL)
+            try? FileManager.default.removeItem(at: dbURL.appendingPathExtension("wal"))
+            try? FileManager.default.removeItem(at: dbURL.appendingPathExtension("shm"))
+            
+            // Create fresh directory
             try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
             
-            // Try again with explicit URL
-            let dbURL = url.appendingPathComponent("TodoDB.sqlite")
+            // Try again with fresh database
             let config = ModelConfiguration(
                 schema: schema,
                 url: dbURL,
-                allowsSave: true
+                allowsSave: true,
+                cloudKitDatabase: .none
             )
             
             do {
                 return try ModelContainer(for: schema, configurations: config)
-        } catch {
-                print("Second attempt failed: \(error)")
-                // Last resort: create a basic persistent container
-                do {
-                    return try ModelContainer(for: Todo.self)
             } catch {
-                fatalError("Could not create ModelContainer: \(error)")
+                print("Second attempt failed: \(error)")
+                // Last resort: in-memory container
+                let memoryConfig = ModelConfiguration(
+                    schema: schema,
+                    isStoredInMemoryOnly: true
+                )
+                
+                do {
+                    return try ModelContainer(for: schema, configurations: memoryConfig)
+                } catch {
+                    fatalError("Could not create ModelContainer: \(error)")
                 }
             }
         }

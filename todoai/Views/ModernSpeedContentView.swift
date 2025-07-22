@@ -297,14 +297,12 @@ struct ModernSpeedContentView: View {
                 todosForDate: todosForDate,
                 onToggleComplete: { todo in
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        todo.isCompleted.toggle()
-                        try? modelContext.save()
+                        todo.toggleCompletionOnDate(selectedDate)
                     }
                 },
                 onDeleteTodo: { todo in
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                         modelContext.delete(todo)
-                        try? modelContext.save()
                     }
                 },
                 onScheduleTodo: { _ in
@@ -312,7 +310,6 @@ struct ModernSpeedContentView: View {
                 },
                 onMoveTodo: { todo, date in
                     todo.dueDate = date
-                    try? modelContext.save()
                 },
                 onAddTaskForDay: { date in
                     selectedDate = date
@@ -323,8 +320,7 @@ struct ModernSpeedContentView: View {
         .focusable()
         .onKeyPress { keyPress in
             if currentView == .calendar {
-                handleCalendarKeyPress(keyPress)
-                return .handled
+                return handleCalendarKeyPress(keyPress)
             }
             return .ignored
         }
@@ -339,14 +335,12 @@ struct ModernSpeedContentView: View {
                         todo: todo,
                         onComplete: {
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                todo.isCompleted.toggle()
-                                try? modelContext.save()
+                                todo.toggleCompletionOnDate(Date())
                             }
                         },
                         onDelete: {
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                                 modelContext.delete(todo)
-                                try? modelContext.save()
                             }
                         },
                         onSchedule: {
@@ -488,7 +482,6 @@ struct ModernSpeedContentView: View {
                        let lastCreatedTodo = todos.last,
                        !Calendar.current.isDate(selectedDate, inSameDayAs: Date()) {
                         lastCreatedTodo.dueDate = selectedDate
-                        try? modelContext.save()
                     }
                     
                     // Haptic feedback for successful creation
@@ -699,6 +692,11 @@ struct ModernSpeedContentView: View {
             return false
         }
         
+        // Hide todos that are deleted/hidden on this specific date
+        if todo.isDeletedOnDate(date) {
+            return false
+        }
+        
         return true
     }
     
@@ -858,6 +856,18 @@ struct ModernTodoCard: View {
         )
         .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isPressed)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: swipeOffset)
+        .contextMenu {
+            Button(action: onComplete) {
+                Label(todo.isCompleted ? "Mark Incomplete" : "Mark Complete", 
+                      systemImage: todo.isCompleted ? "circle" : "checkmark.circle")
+            }
+            
+            Divider()
+            
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+        }
         .onLongPressGesture {
             // Trigger scheduling view on long press
             #if canImport(UIKit)
@@ -1089,22 +1099,31 @@ struct ModernCalendarGrid: View {
                         Button(action: {
                             completeTodoOnDate(todo, date: date)
                         }) {
-                            Label(todo.isCompletedOnDate(date) ? "Mark Incomplete" : "Mark Complete", 
-                                  systemImage: todo.isCompletedOnDate(date) ? "circle" : "checkmark.circle")
-                        }
-                        
-                        Button(action: {
-                            onScheduleTodo(todo)
-                        }) {
-                            Label("Schedule", systemImage: "calendar")
+                            Label("Toggle Complete", systemImage: "checkmark.circle")
                         }
                         
                         Divider()
                         
-                        Button(role: .destructive, action: {
-                            onDeleteTodo(todo)
-                        }) {
-                            Label("Delete", systemImage: "trash")
+                        if todo.isRecurring {
+                            Button(role: .destructive, action: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    todo.markDeletedOnDate(date)
+                                }
+                            }) {
+                                Label("Hide for This Day", systemImage: "eye.slash")
+                            }
+                            
+                            Button(role: .destructive, action: {
+                                onDeleteTodo(todo)
+                            }) {
+                                Label("Delete Recurring Todo", systemImage: "trash.fill")
+                            }
+                        } else {
+                            Button(role: .destructive, action: {
+                                onDeleteTodo(todo)
+                            }) {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
                     }
                     .draggable(todo.id.uuidString) {
@@ -1214,8 +1233,8 @@ struct ModernCalendarGrid: View {
     /// Complete a todo on a specific date - handles both simple and recurring todos
     private func completeTodoOnDate(_ todo: Todo, date: Date) {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            // Use the new method from Todo model
-            todo.markCompletedOnDate(date)
+            // Use the smart toggle method from Todo model
+            todo.toggleCompletionOnDate(date)
         }
     }
     
@@ -1356,6 +1375,18 @@ struct CompactTodoRow: View {
                         }
                     }
             )
+            .contextMenu {
+                Button(action: onComplete) {
+                    Label(todo.isCompleted ? "Mark Incomplete" : "Mark Complete", 
+                          systemImage: todo.isCompleted ? "circle" : "checkmark.circle")
+                }
+                
+                Divider()
+                
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
             .onLongPressGesture {
                 onSchedule()
             }
