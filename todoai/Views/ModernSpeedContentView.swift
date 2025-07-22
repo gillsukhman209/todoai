@@ -1761,21 +1761,26 @@ struct CompactTodoCard: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Completion button
-            Button(action: onComplete) {
-                ZStack {
-                    Circle()
-                        .stroke(todo.isCompletedOnDate(date) ? .green : .white.opacity(0.4), lineWidth: 2)
-                        .frame(width: 20, height: 20)
-                    
-                    if todo.isCompletedOnDate(date) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.green)
-                    }
+            // Completion button - with explicit tap gesture to ensure it works
+            ZStack {
+                Circle()
+                    .stroke(todo.isCompletedOnDate(date) ? .green : .white.opacity(0.4), lineWidth: 2)
+                    .frame(width: 20, height: 20)
+                
+                if todo.isCompletedOnDate(date) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.green)
                 }
             }
-            .buttonStyle(.plain)
+            .frame(width: 28, height: 28) // Larger hit area
+            .contentShape(Circle()) // Ensure entire area is tappable
+            .onTapGesture {
+                print("🟢 Compact bubble tapped for todo: \(todo.title)")
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    onComplete()
+                }
+            }
             
             // Todo content
             VStack(alignment: .leading, spacing: 2) {
@@ -1833,19 +1838,25 @@ struct CompactTodoCard: View {
         )
         .offset(x: swipeOffset)
         .gesture(
-            DragGesture()
+            DragGesture(minimumDistance: 15)
                 .onChanged { value in
-                    if value.translation.width < 0 {
-                        swipeOffset = max(value.translation.width * 0.3, -80)
-                    } else if value.translation.width > 0 {
-                        swipeOffset = min(value.translation.width * 0.3, 80)
+                    // Only start swiping if the drag starts from the right side (not on the button)
+                    if value.startLocation.x > 40 {
+                        if value.translation.width < 0 {
+                            swipeOffset = max(value.translation.width * 0.3, -80)
+                        } else if value.translation.width > 0 {
+                            swipeOffset = min(value.translation.width * 0.3, 80)
+                        }
                     }
                 }
                 .onEnded { value in
-                    if value.translation.width > 60 {
-                        onComplete()
-                    } else if value.translation.width < -60 {
-                        onDelete()
+                    // Only complete swipe actions if drag started from the right side
+                    if value.startLocation.x > 40 {
+                        if value.translation.width > 60 {
+                            onComplete()
+                        } else if value.translation.width < -60 {
+                            onDelete()
+                        }
                     }
                     
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
