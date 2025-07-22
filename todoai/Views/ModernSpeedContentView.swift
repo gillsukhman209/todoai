@@ -138,6 +138,53 @@ struct ModernSpeedContentView: View {
         return result
     }
     
+    // MARK: - Persistence Helpers
+    
+    /// Save the model context with error handling
+    private func saveContext() {
+        do {
+            try modelContext.save()
+            print("✅ Successfully saved model context")
+        } catch {
+            print("❌ Failed to save model context: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Save context whenever a todo is modified
+    private func saveTodoChanges() {
+        saveContext()
+    }
+    
+    /// Verify database status and log todo count
+    private func verifyDatabaseStatus() {
+        print("📊 Database Status:")
+        print("  - Total todos loaded: \(todos.count)")
+        print("  - Database location: \(getDatabasePath())")
+        
+        if todos.isEmpty {
+            print("⚠️ No todos found - this might be a new install or data loss")
+        } else {
+            print("✅ Successfully loaded \(todos.count) todos from database")
+            
+            // Log some sample todos for verification
+            let sampleCount = min(3, todos.count)
+            for (index, todo) in todos.prefix(sampleCount).enumerated() {
+                print("  \(index + 1). \(todo.title) (created: \(todo.createdAt.formatted()))")
+            }
+            
+            if todos.count > 3 {
+                print("  ... and \(todos.count - 3) more")
+            }
+        }
+    }
+    
+    /// Get the database file path for debugging
+    private func getDatabasePath() -> String {
+        let appSupportURL = URL.applicationSupportDirectory.appendingPathComponent("TodoAI")
+        let dbURL = appSupportURL.appendingPathComponent("TodoDatabase.sqlite")
+        return dbURL.path
+    }
+    
     var body: some View {
         ZStack {
             // Ultra-clean background
@@ -175,6 +222,12 @@ struct ModernSpeedContentView: View {
             // Set the model context for AI task creation
             taskCreationViewModel.updateModelContext(modelContext)
             taskCreationViewModel.updateSelectedDate(selectedDate)
+            
+            // Force save any pending changes on app startup
+            saveContext()
+            
+            // Verify database status and log diagnostics
+            verifyDatabaseStatus()
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusTaskInput)) { _ in
             // Handle Command+N from menu
@@ -210,6 +263,14 @@ struct ModernSpeedContentView: View {
             if currentView == .calendar {
                 taskCreationViewModel.updateSelectedDate(newValue)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            // Save data when app goes to background
+            saveContext()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            // Save data when app is about to terminate
+            saveContext()
         }
     }
     
@@ -394,11 +455,13 @@ struct ModernSpeedContentView: View {
                 onToggleComplete: { todo in
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                         todo.toggleCompletionOnDate(selectedDate)
+                        saveTodoChanges()
                     }
                 },
                 onDeleteTodo: { todo in
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                         modelContext.delete(todo)
+                        saveTodoChanges()
                     }
                 },
                 onScheduleTodo: { _ in
@@ -406,6 +469,7 @@ struct ModernSpeedContentView: View {
                 },
                 onMoveTodo: { todo, date in
                     todo.dueDate = date
+                    saveTodoChanges()
                 },
                 onAddTaskForDay: { date in
                     selectedDate = date
@@ -425,11 +489,13 @@ struct ModernSpeedContentView: View {
                         onComplete: {
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                                 todo.toggleCompletionOnDate(Date())
+                                saveTodoChanges()
                             }
                         },
                         onDelete: {
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                                 modelContext.delete(todo)
+                                saveTodoChanges()
                             }
                         },
                         onSchedule: {
@@ -576,6 +642,7 @@ struct ModernSpeedContentView: View {
                        let lastCreatedTodo = todos.last,
                        !Calendar.current.isDate(selectedDate, inSameDayAs: Date()) {
                         lastCreatedTodo.dueDate = selectedDate
+                        saveTodoChanges()
                     }
                     
                     // Haptic feedback for successful creation
@@ -1060,6 +1127,7 @@ struct ModernCalendarWrapper: View {
 
 // MARK: - Modern Calendar Grid
 struct ModernCalendarGrid: View {
+    @Environment(\.modelContext) private var modelContext
     let todos: [Todo]
     let currentMonth: Date
     @Binding var selectedDate: Date
@@ -1071,6 +1139,16 @@ struct ModernCalendarGrid: View {
     let onAddTaskForDay: (Date) -> Void
     
     private let calendar = Calendar.current
+    
+    /// Save the model context with error handling
+    private func saveContext() {
+        do {
+            try modelContext.save()
+            print("✅ Successfully saved model context")
+        } catch {
+            print("❌ Failed to save model context: \(error.localizedDescription)")
+        }
+    }
     
     // Get weeks for the current month
     private var weekDays: [[Date]] {
@@ -1330,6 +1408,9 @@ struct ModernCalendarGrid: View {
                 }
             }
         }
+        
+        // Save changes
+        saveContext()
     }
     
     /// Complete a todo on a specific date - handles both simple and recurring todos
@@ -1338,6 +1419,9 @@ struct ModernCalendarGrid: View {
             // Use the smart toggle method from Todo model
             todo.toggleCompletionOnDate(date)
         }
+        
+        // Save changes
+        saveContext()
     }
     
     /// Get SwiftUI Color for priority level

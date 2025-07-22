@@ -24,53 +24,56 @@ struct todoaiApp: App {
     
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([Todo.self, TimeRange.self, RecurrenceConfig.self])
+        
+        // Create a dedicated directory for our app data
+        let appSupportURL = URL.applicationSupportDirectory.appendingPathComponent("TodoAI")
+        try? FileManager.default.createDirectory(at: appSupportURL, withIntermediateDirectories: true)
+        
+        let dbURL = appSupportURL.appendingPathComponent("TodoDatabase.sqlite")
+        
         let modelConfiguration = ModelConfiguration(
             schema: schema,
-            isStoredInMemoryOnly: false,
+            url: dbURL,
             allowsSave: true,
             cloudKitDatabase: .none
         )
         
         do {
-            return try ModelContainer(for: schema, configurations: modelConfiguration)
-        } catch {
-            print("Failed to create ModelContainer: \(error)")
+            let container = try ModelContainer(for: schema, configurations: modelConfiguration)
+            print("✅ Database loaded successfully at: \(dbURL.path)")
             
-            // Try deleting the old database for migration
-            let url = URL.applicationSupportDirectory.appendingPathComponent("todoai")
-            let dbURL = url.appendingPathComponent("TodoDB.sqlite")
-            
-            // Remove old database files
-            try? FileManager.default.removeItem(at: dbURL)
-            try? FileManager.default.removeItem(at: dbURL.appendingPathExtension("wal"))
-            try? FileManager.default.removeItem(at: dbURL.appendingPathExtension("shm"))
-            
-            // Create fresh directory
-            try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-            
-            // Try again with fresh database
-            let config = ModelConfiguration(
-                schema: schema,
-                url: dbURL,
-                allowsSave: true,
-                cloudKitDatabase: .none
-            )
-            
-            do {
-                return try ModelContainer(for: schema, configurations: config)
-            } catch {
-                print("Second attempt failed: \(error)")
-                // Last resort: in-memory container
-                let memoryConfig = ModelConfiguration(
-                    schema: schema,
-                    isStoredInMemoryOnly: true
-                )
-                
+            // Check if database file exists and log its size
+            if FileManager.default.fileExists(atPath: dbURL.path) {
                 do {
-                    return try ModelContainer(for: schema, configurations: memoryConfig)
+                    let attributes = try FileManager.default.attributesOfItem(atPath: dbURL.path)
+                    let fileSize = attributes[.size] as? Int64 ?? 0
+                    print("📊 Database file size: \(fileSize) bytes")
                 } catch {
-                    fatalError("Could not create ModelContainer: \(error)")
+                    print("⚠️ Could not read database file size: \(error)")
                 }
+            } else {
+                print("⚠️ Database file does not exist yet - will be created on first save")
+            }
+            
+            return container
+        } catch {
+            print("❌ Failed to create ModelContainer: \(error)")
+            print("Database location: \(dbURL.path)")
+            
+            // Try one more time with error recovery (but don't delete existing data)
+            do {
+                let fallbackConfig = ModelConfiguration(
+                    schema: schema,
+                    url: dbURL,
+                    allowsSave: true,
+                    cloudKitDatabase: .none
+                )
+                let container = try ModelContainer(for: schema, configurations: fallbackConfig)
+                print("✅ Database recovered successfully")
+                return container
+            } catch {
+                print("❌ Database recovery failed: \(error)")
+                fatalError("Could not create persistent ModelContainer. Check console for details.")
             }
         }
     }()
