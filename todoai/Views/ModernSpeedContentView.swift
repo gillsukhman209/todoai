@@ -229,18 +229,41 @@ struct ModernSpeedContentView: View {
     
     /// Move selection down in the todo list
     private func navigateDown() {
-        guard !isAnyTextInputActive else { return }
+        print("🔑 navigateDown() called")
+        print("🔑 isAnyTextInputActive: \(isAnyTextInputActive)")
+        guard !isAnyTextInputActive else { 
+            print("🔑 Blocked by isAnyTextInputActive")
+            return 
+        }
         
         let todos = navigableTodos
-        guard !todos.isEmpty else { return }
+        print("🔑 navigableTodos count: \(todos.count)")
+        guard !todos.isEmpty else { 
+            print("🔑 No todos available")
+            return 
+        }
         
         if let currentIndex = selectedTodoIndex {
-            // Move to next todo, wrap to top if at bottom
-            let newIndex = currentIndex < todos.count - 1 ? currentIndex + 1 : 0
-            selectedTodoId = todos[newIndex].id
+            print("🔑 Current index: \(currentIndex)")
+            // If we're at the last todo, move to input instead of wrapping
+            if currentIndex >= todos.count - 1 {
+                print("🔑 At last todo, moving to input mode")
+                keyboardMode = .input
+                selectedTodoId = nil
+                // Focus the input field
+                DispatchQueue.main.async {
+                    isInputFocused = true
+                }
+            } else {
+                // Move to next todo
+                let newIndex = currentIndex + 1
+                selectedTodoId = todos[newIndex].id
+                print("🔑 New index: \(newIndex), selected: \(todos[newIndex].title)")
+            }
         } else {
-            // No selection, select first todo
+            print("🔑 No current selection, selecting first todo")
             selectedTodoId = todos.first?.id
+            print("🔑 Selected: \(todos.first?.title ?? "unknown")")
         }
     }
     
@@ -480,8 +503,11 @@ struct ModernSpeedContentView: View {
         .onChange(of: isInputFocused) { oldValue, newValue in
             // Update keyboard mode when input focus changes
             if newValue {
+                print("🔄 Input focused - switching to input mode and clearing selection")
                 keyboardMode = .input
+                selectedTodoId = nil  // Clear todo selection when focusing input
             } else if keyboardMode == .input {
+                print("🔄 Input unfocused - switching to navigation mode")
                 keyboardMode = .navigation
             }
         }
@@ -967,8 +993,10 @@ struct ModernSpeedContentView: View {
         
         Task {
             await taskCreationViewModel.createTodo()
+            print("🔄 Todo creation state: \(taskCreationViewModel.state)")
             if case .completed = taskCreationViewModel.state {
                 await MainActor.run {
+                    print("✅ Clearing input field after successful todo creation")
                     quickInput = ""
                     taskCreationViewModel.input = ""
                     suggestions = []
@@ -1197,12 +1225,15 @@ struct ModernSpeedContentView: View {
             return .ignored
             
         case .return:
-            // Only handle Enter for todo completion if input field is not focused
-            if !isInputFocused {
+            // Only handle Enter for todo completion if in navigation mode
+            if keyboardMode == .navigation {
+                print("🔑 Enter key in navigation mode - toggling completion")
                 toggleSelectedTodoCompletion()
                 return .handled
+            } else {
+                print("🔑 Enter key in \(keyboardMode) mode - ignoring")
+                return .ignored
             }
-            return .ignored
             
         case .delete:
             deleteSelectedTodo()
@@ -1302,12 +1333,15 @@ struct ModernSpeedContentView: View {
             }
             
         case .return:
-            // Only handle Enter for todo completion if input field is not focused
-            if !isInputFocused {
+            // Only handle Enter for todo completion if in navigation mode
+            if keyboardMode == .navigation {
+                print("🔑 Calendar Enter key in navigation mode - toggling completion")
                 toggleSelectedTodoCompletion()
                 return .handled
+            } else {
+                print("🔑 Calendar Enter key in \(keyboardMode) mode - ignoring")
+                return .ignored
             }
-            return .ignored
             
         case .delete:
             deleteSelectedTodo()
