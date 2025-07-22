@@ -11,6 +11,10 @@ import AppKit
 
 extension Notification.Name {
     static let focusTaskInput = Notification.Name("focusTaskInput")
+    static let showTodayView = Notification.Name("showTodayView")
+    static let showUpcomingView = Notification.Name("showUpcomingView")
+    static let showCalendarView = Notification.Name("showCalendarView")
+    static let showAllView = Notification.Name("showAllView")
 }
 
 @main
@@ -103,6 +107,30 @@ struct todoaiApp: App {
                     NotificationCenter.default.post(name: .focusTaskInput, object: nil)
                 }
                 .keyboardShortcut("n", modifiers: .command)
+            }
+            
+            CommandGroup(after: .newItem) {
+                Divider()
+                
+                Button("Show Today") {
+                    NotificationCenter.default.post(name: .showTodayView, object: nil)
+                }
+                .keyboardShortcut("t", modifiers: [])
+                
+                Button("Show Upcoming") {
+                    NotificationCenter.default.post(name: .showUpcomingView, object: nil)
+                }
+                .keyboardShortcut("u", modifiers: [])
+                
+                Button("Show Calendar") {
+                    NotificationCenter.default.post(name: .showCalendarView, object: nil)
+                }
+                .keyboardShortcut("c", modifiers: [])
+                
+                Button("Show All Tasks") {
+                    NotificationCenter.default.post(name: .showAllView, object: nil)
+                }
+                .keyboardShortcut("a", modifiers: [])
             }
         }
     }

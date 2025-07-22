@@ -38,6 +38,22 @@ struct ModernSpeedContentView: View {
     // Performance optimization: cache for todo filtering
     @State private var todoCache: [String: [Todo]] = [:]
     
+    // Safety system for keyboard shortcuts
+    private var isAnyTextInputActive: Bool {
+        // Check main input focus
+        if isInputFocused { return true }
+        
+        // Check if quickInput has content (user might be typing)
+        if !quickInput.isEmpty { return true }
+        
+        // TODO: Add checks for other text input states when implementing inline editing
+        // - Check editing states from other views
+        // - Check modal text inputs
+        // - Check system text selection
+        
+        return false
+    }
+    
     // Common task suggestions
     private let commonTasks = [
         "Buy groceries", "Exercise for 30 minutes", "Call dentist", "Pay bills",
@@ -128,6 +144,10 @@ struct ModernSpeedContentView: View {
             Rectangle()
                 .fill(Color.black)
                 .ignoresSafeArea()
+                .onTapGesture {
+                    // Unfocus input when clicking on background
+                    isInputFocused = false
+                }
             
             // Main speed-focused layout
             VStack(spacing: 0) {
@@ -149,15 +169,41 @@ struct ModernSpeedContentView: View {
         .focusEffectDisabled()
         .focusable(currentView == .calendar)
         .onKeyPress { keyPress in
-            if currentView == .calendar {
-                return handleCalendarKeyPress(keyPress)
-            }
-            return .ignored
+            return handleGlobalKeyPress(keyPress)
         }
         .onAppear {
             // Set the model context for AI task creation
             taskCreationViewModel.updateModelContext(modelContext)
             taskCreationViewModel.updateSelectedDate(selectedDate)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .focusTaskInput)) { _ in
+            // Handle Command+N from menu
+            isInputFocused = true
+            if currentView != .today {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    currentView = .today
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showTodayView)) { _ in
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                currentView = .today
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showUpcomingView)) { _ in
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                currentView = .upcoming
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showCalendarView)) { _ in
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                currentView = .calendar
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showAllView)) { _ in
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                currentView = .all
+            }
         }
         .onChange(of: selectedDate) { oldValue, newValue in
             // Only update selected date in task creation when in calendar view
@@ -241,6 +287,17 @@ struct ModernSpeedContentView: View {
                 
                 Text(view.rawValue)
                     .font(.system(size: 14, weight: .semibold))
+                
+                // Keyboard shortcut hint
+                Text(keyboardShortcutHint(for: view))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundColor(currentView == view ? .black.opacity(0.5) : .white.opacity(0.5))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(Color.black.opacity(0.1))
+                    )
             }
             .foregroundColor(currentView == view ? .black : .white.opacity(0.7))
             .padding(.horizontal, 12)
@@ -255,6 +312,15 @@ struct ModernSpeedContentView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+    
+    private func keyboardShortcutHint(for view: SpeedView) -> String {
+        switch view {
+        case .today: return "T"
+        case .upcoming: return "U"
+        case .calendar: return "C"
+        case .all: return "A"
+        }
     }
     
     // MARK: - Modern Calendar View
@@ -627,7 +693,16 @@ struct ModernSpeedContentView: View {
         suggestions = Array(filtered)
     }
     
-    // MARK: - Calendar Navigation
+    // MARK: - Keyboard Navigation
+    
+    private func handleGlobalKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
+        // Delegate calendar navigation to existing handler when in calendar view
+        if currentView == .calendar {
+            return handleCalendarKeyPress(keyPress)
+        }
+        
+        return .ignored
+    }
     
     private func handleCalendarKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
         let calendar = Calendar.current
