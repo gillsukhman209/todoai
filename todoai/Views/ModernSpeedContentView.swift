@@ -145,7 +145,10 @@ struct ModernSpeedContentView: View {
             taskCreationViewModel.updateSelectedDate(selectedDate)
         }
         .onChange(of: selectedDate) { oldValue, newValue in
-            taskCreationViewModel.updateSelectedDate(newValue)
+            // Only update selected date in task creation when in calendar view
+            if currentView == .calendar {
+                taskCreationViewModel.updateSelectedDate(newValue)
+            }
         }
     }
     
@@ -246,6 +249,11 @@ struct ModernSpeedContentView: View {
         Button(action: {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 currentView = view
+                // Reset selected date to today when leaving calendar view
+                if view != .calendar {
+                    selectedDate = Date()
+                    taskCreationViewModel.updateSelectedDate(Date())
+                }
             }
         }) {
             HStack(spacing: 6) {
@@ -971,7 +979,8 @@ struct ModernCalendarWrapper: View {
                     CompactTodoRow(
                         todo: todo,
                         onComplete: { onToggleComplete(todo) },
-                        onSchedule: { onScheduleTodo(todo) }
+                        onSchedule: { onScheduleTodo(todo) },
+                        onDelete: { onDeleteTodo(todo) }
                     )
                 }
             }
@@ -1129,6 +1138,28 @@ struct ModernCalendarGrid: View {
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
                             .fill(todo.isCompletedOnDate(date) ? .green.opacity(0.15) : .cyan.opacity(0.15))
                     )
+                    .contextMenu {
+                        Button(action: {
+                            completeTodoOnDate(todo, date: date)
+                        }) {
+                            Label(todo.isCompletedOnDate(date) ? "Mark Incomplete" : "Mark Complete", 
+                                  systemImage: todo.isCompletedOnDate(date) ? "circle" : "checkmark.circle")
+                        }
+                        
+                        Button(action: {
+                            onScheduleTodo(todo)
+                        }) {
+                            Label("Schedule", systemImage: "calendar")
+                        }
+                        
+                        Divider()
+                        
+                        Button(role: .destructive, action: {
+                            onDeleteTodo(todo)
+                        }) {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                     .draggable(todo.id.uuidString) {
                         // Drag preview
                         Text(todo.title)
@@ -1261,44 +1292,103 @@ struct CompactTodoRow: View {
     let todo: Todo
     let onComplete: () -> Void
     let onSchedule: () -> Void
+    let onDelete: () -> Void
+    
+    @State private var swipeOffset: CGFloat = 0
+    @State private var showDeleteButton = false
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Completion button
-            Button(action: onComplete) {
-                Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(todo.isCompleted ? .green : .white.opacity(0.6))
-            }
-            .buttonStyle(.plain)
-            
-            // Todo content
-            VStack(alignment: .leading, spacing: 2) {
-                Text(todo.title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(todo.isCompleted ? .white.opacity(0.5) : .white)
-                    .strikethrough(todo.isCompleted, color: .white.opacity(0.5))
-                    .lineLimit(2)
+        ZStack {
+            // Delete button background
+            HStack {
+                Spacer()
                 
-                if !todo.scheduleDescription.isEmpty {
-                    Text(todo.scheduleDescription)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.cyan.opacity(0.8))
+                Button(action: {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        swipeOffset = -1000 // Swipe off screen
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        onDelete()
+                    }
+                }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                        .frame(width: 60)
+                        .frame(maxHeight: .infinity)
+                        .background(Color.red)
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+                .opacity(showDeleteButton ? 1 : 0)
+            }
+            
+            // Main content
+            HStack(spacing: 12) {
+                // Completion button
+                Button(action: onComplete) {
+                    Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(todo.isCompleted ? .green : .white.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                
+                // Todo content
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(todo.title)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(todo.isCompleted ? .white.opacity(0.5) : .white)
+                        .strikethrough(todo.isCompleted, color: .white.opacity(0.5))
+                        .lineLimit(2)
+                    
+                    if !todo.scheduleDescription.isEmpty {
+                        Text(todo.scheduleDescription)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.cyan.opacity(0.8))
+                    }
+                }
+                
+                Spacer()
+                
+                // Schedule indicator
+                if todo.isRecurring {
+                    Image(systemName: "repeat")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.cyan.opacity(0.6))
                 }
             }
-            
-            Spacer()
-            
-            // Schedule indicator
-            if todo.isRecurring {
-                Image(systemName: "repeat")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.cyan.opacity(0.6))
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.black)
+            )
+            .offset(x: swipeOffset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if value.translation.width < 0 {
+                            swipeOffset = max(value.translation.width, -60)
+                            showDeleteButton = swipeOffset < -20
+                        }
+                    }
+                    .onEnded { value in
+                        if value.translation.width < -50 {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                swipeOffset = -60
+                                showDeleteButton = true
+                            }
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                swipeOffset = 0
+                                showDeleteButton = false
+                            }
+                        }
+                    }
+            )
+            .onLongPressGesture {
+                onSchedule()
             }
-        }
-        .padding(.vertical, 4)
-        .onLongPressGesture {
-            onSchedule()
         }
     }
 }
