@@ -103,6 +103,35 @@ struct ModernSpeedContentView: View {
         }.sorted(by: { !$0.isCompleted && $1.isCompleted })
     }
     
+    /// Group upcoming todos by date for timeline view (includes today + next 7 days)
+    private func groupUpcomingTodosByDate() -> [(Date, [Todo])] {
+        let calendar = Calendar.current
+        let today = Date()
+        var groupedTodos: [Date: [Todo]] = [:]
+        
+        // Include today (dayOffset 0) and next 7 days
+        for dayOffset in 0...7 {
+            guard let date = calendar.date(byAdding: .day, value: dayOffset, to: today) else { continue }
+            
+            let todosForDate = todos.filter { todo in
+                shouldTodoAppearOnDate(todo, date: date)
+            }.sorted { first, second in
+                // Sort by time if available, then by creation date
+                if let firstTime = first.dueTime, let secondTime = second.dueTime {
+                    return firstTime < secondTime
+                }
+                return first.createdAt < second.createdAt
+            }
+            
+            if !todosForDate.isEmpty {
+                groupedTodos[date] = todosForDate
+            }
+        }
+        
+        // Convert to sorted array of tuples
+        return groupedTodos.sorted { $0.key < $1.key }
+    }
+    
     private var displayTodos: [Todo] {
         switch currentView {
         case .calendar: return todos // All todos for calendar view
@@ -201,15 +230,23 @@ struct ModernSpeedContentView: View {
                 // Modern header
                 modernHeader
                 
-                // Content area - Calendar or Todo List
-                if currentView == .calendar {
-                    modernCalendarView
-                } else {
-                    speedTodoList
+                // Content area - Calendar, Timeline, or Todo List - This should expand
+                ZStack {
+                    if currentView == .calendar {
+                        modernCalendarView
+                    } else if currentView == .upcoming {
+                        upcomingTimelineView
+                    } else {
+                        speedTodoList
+                    }
+                    
+                    // Lightning-fast input overlay at bottom
+                    VStack {
+                        Spacer()
+                        lightningInputFixed
+                    }
                 }
-                
-                // Lightning-fast input
-                lightningInput
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .preferredColorScheme(.dark)
@@ -479,6 +516,23 @@ struct ModernSpeedContentView: View {
         }
     }
     
+    // MARK: - Upcoming Timeline View
+    private var upcomingTimelineView: some View {
+        UpcomingTimelineView(
+            groupedTodos: groupUpcomingTodosByDate(),
+            onToggleComplete: { todo in
+                // Just save the changes - the toggle is handled by DaySection
+                saveTodoChanges()
+            },
+            onDeleteTodo: { todo in
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    modelContext.delete(todo)
+                    saveTodoChanges()
+                }
+            }
+        )
+    }
+    
     // MARK: - Speed Todo List  
     private var speedTodoList: some View {
         ScrollView(showsIndicators: false) {
@@ -532,7 +586,98 @@ struct ModernSpeedContentView: View {
         .padding(.top, 60)
     }
     
-    // MARK: - Lightning Input
+    // MARK: - Lightning Input Fixed (without Spacer)
+    private var lightningInputFixed: some View {
+        VStack(spacing: 12) {
+            // Smart suggestions row
+            if !suggestions.isEmpty && isInputFocused && !quickInput.isEmpty {
+                smartSuggestionsRow
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            
+            // AI Status indicator
+            if !taskCreationViewModel.statusMessage.isEmpty {
+                aiStatusIndicator
+                    .transition(.opacity)
+            }
+            
+            HStack(spacing: 16) {
+                HStack {
+                    TextField("Try: 'workout every Mon, Wed, Fri at 7pm'", text: $quickInput)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white)
+                        .textFieldStyle(.plain)
+                        .focused($isInputFocused)
+                        .onSubmit {
+                            createTodoWithAI()
+                        }
+                        .onChange(of: quickInput) { oldValue, newValue in
+                            taskCreationViewModel.input = newValue
+                            // Only update suggestions if input is meaningful
+                            if newValue.count > 2 {
+                                updateSuggestions(for: newValue)
+                            } else {
+                                suggestions = []
+                            }
+                        }
+                    
+                    if !quickInput.isEmpty {
+                        Group {
+                            if taskCreationViewModel.isLoading {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
+                            } else {
+                                Button(action: createTodoWithAI) {
+                                    Image(systemName: "arrow.up")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.black)
+                                        .frame(width: 32, height: 32)
+                                        .background(
+                                            Circle()
+                                                .fill(.cyan)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.white.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(isInputFocused ? .cyan.opacity(0.5) : .white.opacity(0.2), lineWidth: 1)
+                        )
+                )
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 32)
+            .background(
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .black.opacity(0),
+                                .black.opacity(0.8),
+                                .black
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .ignoresSafeArea()
+            )
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isInputFocused)
+        .animation(.spring(response: 0.2, dampingFraction: 0.9), value: quickInput.isEmpty)
+    }
+    
+    // MARK: - Lightning Input (Original with Spacer)
     private var lightningInput: some View {
         VStack(spacing: 12) {
             Spacer()
@@ -1577,6 +1722,330 @@ struct CompactTodoRow: View {
                 onSchedule()
             }
         }
+    }
+}
+
+// MARK: - Upcoming Timeline Components
+
+/// Compact todo card optimized for day sections
+struct CompactTodoCard: View {
+    let todo: Todo
+    let date: Date
+    let onComplete: () -> Void
+    let onDelete: () -> Void
+    
+    @State private var swipeOffset: CGFloat = 0
+    
+    private var timeDisplay: String {
+        if let dueTime = todo.dueTime {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            return formatter.string(from: dueTime)
+        }
+        return ""
+    }
+    
+    private var timeOfDayLabel: String {
+        guard let dueTime = todo.dueTime else { return "" }
+        let hour = Calendar.current.component(.hour, from: dueTime)
+        
+        switch hour {
+        case 5..<12: return "Morning"
+        case 12..<17: return "Afternoon"
+        case 17..<21: return "Evening"
+        default: return "Night"
+        }
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Completion button
+            Button(action: onComplete) {
+                ZStack {
+                    Circle()
+                        .stroke(todo.isCompletedOnDate(date) ? .green : .white.opacity(0.4), lineWidth: 2)
+                        .frame(width: 20, height: 20)
+                    
+                    if todo.isCompletedOnDate(date) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.green)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            
+            // Todo content
+            VStack(alignment: .leading, spacing: 2) {
+                Text(todo.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(todo.isCompletedOnDate(date) ? .white.opacity(0.5) : .white)
+                    .strikethrough(todo.isCompletedOnDate(date), color: .white.opacity(0.5))
+                    .lineLimit(2)
+                
+                if !timeDisplay.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 10, weight: .medium))
+                        
+                        Text(timeDisplay)
+                            .font(.system(size: 11, weight: .medium))
+                        
+                        if !timeOfDayLabel.isEmpty {
+                            Text("•")
+                                .font(.system(size: 8))
+                            
+                            Text(timeOfDayLabel)
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                    }
+                    .foregroundColor(.white.opacity(0.6))
+                }
+            }
+            
+            Spacer()
+            
+            // Priority/type indicator
+            VStack(spacing: 2) {
+                if todo.isRecurring {
+                    Image(systemName: "repeat")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.cyan.opacity(0.8))
+                } else {
+                    Circle()
+                        .fill(priorityColor(for: todo.actualPriority))
+                        .frame(width: 6, height: 6)
+                        .opacity(todo.isCompletedOnDate(date) ? 0.5 : 0.8)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.white.opacity(todo.isCompletedOnDate(date) ? 0.03 : 0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+        .offset(x: swipeOffset)
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    if value.translation.width < 0 {
+                        swipeOffset = max(value.translation.width * 0.3, -80)
+                    } else if value.translation.width > 0 {
+                        swipeOffset = min(value.translation.width * 0.3, 80)
+                    }
+                }
+                .onEnded { value in
+                    if value.translation.width > 60 {
+                        onComplete()
+                    } else if value.translation.width < -60 {
+                        onDelete()
+                    }
+                    
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        swipeOffset = 0
+                    }
+                }
+        )
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: swipeOffset)
+    }
+    
+    private func priorityColor(for priority: TaskPriority) -> Color {
+        switch priority {
+        case .low: return .gray
+        case .medium: return .blue
+        case .high: return .orange
+        case .urgent: return .red
+        }
+    }
+}
+
+/// Day section with timeline header and todos
+struct DaySection: View {
+    let date: Date
+    let todos: [Todo]
+    let isFirst: Bool
+    let onToggleComplete: (Todo) -> Void
+    let onDeleteTodo: (Todo) -> Void
+    
+    private var dayTitle: String {
+        let calendar = Calendar.current
+        let today = Date()
+        
+        if calendar.isDate(date, inSameDayAs: today) {
+            return "Today"
+        } else if calendar.isDate(date, inSameDayAs: calendar.date(byAdding: .day, value: 1, to: today) ?? today) {
+            return "Tomorrow"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE"
+            return formatter.string(from: date)
+        }
+    }
+    
+    private var dateSubtitle: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
+    
+    private var isWeekend: Bool {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date)
+        return weekday == 1 || weekday == 7 // Sunday or Saturday
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Timeline connection line (except for first item)
+            if !isFirst {
+                Rectangle()
+                    .fill(.white.opacity(0.1))
+                    .frame(width: 2, height: 20)
+                    .padding(.leading, 11)
+            }
+            
+            // Day header with timeline dot
+            HStack(spacing: 16) {
+                // Timeline dot
+                ZStack {
+                    Circle()
+                        .fill(isWeekend ? .cyan.opacity(0.3) : .white.opacity(0.2))
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Circle()
+                                .stroke(.white.opacity(0.4), lineWidth: 2)
+                        )
+                    
+                    Circle()
+                        .fill(isWeekend ? .cyan : .white.opacity(0.8))
+                        .frame(width: 8, height: 8)
+                }
+                
+                // Day info
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(dayTitle)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        Text(dateSubtitle)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    
+                    let activeTasks = todos.filter { !$0.isCompletedOnDate(date) }.count
+                    let totalTasks = todos.count
+                    
+                    Text(activeTasks == totalTasks ? "\(totalTasks) tasks" : "\(activeTasks) of \(totalTasks) remaining")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                
+                Spacer()
+                
+                // Completion progress
+                if !todos.isEmpty {
+                    let completedCount = todos.filter { $0.isCompletedOnDate(date) }.count
+                    let progress = Double(completedCount) / Double(todos.count)
+                    
+                    ZStack {
+                        Circle()
+                            .stroke(.white.opacity(0.2), lineWidth: 3)
+                            .frame(width: 28, height: 28)
+                        
+                        Circle()
+                            .trim(from: 0, to: progress)
+                            .stroke(.green, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                            .frame(width: 28, height: 28)
+                            .rotationEffect(.degrees(-90))
+                        
+                        if progress == 1.0 {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 16)
+            
+            // Todos for this day
+            VStack(spacing: 8) {
+                ForEach(todos, id: \.id) { todo in
+                    CompactTodoCard(
+                        todo: todo,
+                        date: date,
+                        onComplete: { 
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                todo.toggleCompletionOnDate(date)
+                            }
+                            onToggleComplete(todo)
+                        },
+                        onDelete: { onDeleteTodo(todo) }
+                    )
+                    .padding(.leading, 40) // Align with timeline
+                }
+            }
+            .padding(.bottom, 24)
+        }
+    }
+}
+
+/// Main upcoming timeline view
+struct UpcomingTimelineView: View {
+    let groupedTodos: [(Date, [Todo])]
+    let onToggleComplete: (Todo) -> Void
+    let onDeleteTodo: (Todo) -> Void
+    
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            if groupedTodos.isEmpty {
+                upcomingEmptyState
+            } else {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(groupedTodos.enumerated()), id: \.offset) { index, dayGroup in
+                        DaySection(
+                            date: dayGroup.0,
+                            todos: dayGroup.1,
+                            isFirst: index == 0,
+                            onToggleComplete: { todo in
+                                onToggleComplete(todo)
+                            },
+                            onDeleteTodo: { todo in
+                                onDeleteTodo(todo)
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+                .padding(.bottom, 100) // Reduced space since input is overlaid
+            }
+        }
+    }
+    
+    private var upcomingEmptyState: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "calendar.day.timeline.right")
+                .font(.system(size: 48, weight: .ultraLight))
+                .foregroundColor(.white.opacity(0.3))
+            
+            VStack(spacing: 8) {
+                Text("Free week ahead!")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.8))
+                
+                Text("No upcoming tasks scheduled")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+        }
+        .padding(.top, 60)
     }
 }
 
