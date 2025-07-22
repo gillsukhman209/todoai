@@ -48,6 +48,7 @@ enum NotificationCategory: String, CaseIterable {
     case habitReminder = "HABIT_REMINDER"
     case projectDeadline = "PROJECT_DEADLINE"
     case shoppingReminder = "SHOPPING_REMINDER"
+    case pomodoroAlert = "POMODORO_ALERT"
     
     var identifier: String { rawValue }
     
@@ -103,6 +104,24 @@ enum NotificationCategory: String, CaseIterable {
                     identifier: "ADD_ITEM_ACTION",
                     title: "Add Item",
                     options: [.foreground]
+                )
+            ]
+        case .pomodoroAlert:
+            return [
+                UNNotificationAction(
+                    identifier: "START_BREAK_ACTION",
+                    title: "Start Break",
+                    options: [.foreground]
+                ),
+                UNNotificationAction(
+                    identifier: "START_WORK_ACTION",
+                    title: "Start Work",
+                    options: [.foreground]
+                ),
+                UNNotificationAction(
+                    identifier: "DISMISS_ACTION",
+                    title: "Dismiss",
+                    options: []
                 )
             ]
         }
@@ -485,6 +504,95 @@ class NotificationService: ObservableObject {
         
         try await notificationCenter.add(request)
         logger.info("Snoozed notification for \(minutes) minutes")
+    }
+    
+    // MARK: - Pomodoro Notifications
+    
+    /// Send immediate notification for Pomodoro session completion
+    func sendPomodoroNotification(title: String, body: String, sessionId: UUID, isWorkSession: Bool) async throws {
+        guard permissionStatus == .authorized || permissionStatus == .provisional else {
+            throw NotificationError.permissionDenied
+        }
+        
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.badge = 1
+        content.categoryIdentifier = NotificationCategory.pomodoroAlert.identifier
+        
+        content.userInfo = [
+            "sessionId": sessionId.uuidString,
+            "isWorkSession": isWorkSession,
+            "type": "pomodoro_completion"
+        ]
+        
+        // Use immediate trigger for instant notification
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        
+        let request = UNNotificationRequest(
+            identifier: "pomodoro-\(sessionId.uuidString)",
+            content: content,
+            trigger: trigger
+        )
+        
+        do {
+            try await notificationCenter.add(request)
+            logger.info("Sent Pomodoro notification: \(title)")
+        } catch {
+            logger.error("Failed to send Pomodoro notification", error: error)
+            throw NotificationError.schedulingFailed(error.localizedDescription)
+        }
+    }
+    
+    /// Schedule notification for when Pomodoro session will complete
+    func schedulePomodoroCompletionNotification(sessionName: String, completionDate: Date, sessionId: UUID, isWorkSession: Bool) async throws {
+        guard permissionStatus == .authorized || permissionStatus == .provisional else {
+            throw NotificationError.permissionDenied
+        }
+        
+        let content = UNMutableNotificationContent()
+        content.title = isWorkSession ? "Work Session Complete!" : "Break Complete!"
+        content.body = isWorkSession ? "Time for a break! Great job on '\(sessionName)'" : "Break's over! Ready to get back to work?"
+        content.sound = .default
+        content.badge = 1
+        content.categoryIdentifier = NotificationCategory.pomodoroAlert.identifier
+        
+        content.userInfo = [
+            "sessionId": sessionId.uuidString,
+            "isWorkSession": isWorkSession,
+            "type": "pomodoro_completion",
+            "sessionName": sessionName
+        ]
+        
+        let trigger = UNCalendarNotificationTrigger(
+            dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: completionDate),
+            repeats: false
+        )
+        
+        let request = UNNotificationRequest(
+            identifier: "pomodoro-scheduled-\(sessionId.uuidString)",
+            content: content,
+            trigger: trigger
+        )
+        
+        do {
+            try await notificationCenter.add(request)
+            logger.info("Scheduled Pomodoro completion notification for: \(completionDate)")
+        } catch {
+            logger.error("Failed to schedule Pomodoro completion notification", error: error)
+            throw NotificationError.schedulingFailed(error.localizedDescription)
+        }
+    }
+    
+    /// Cancel Pomodoro notifications for a session
+    func cancelPomodoroNotifications(sessionId: UUID) {
+        let identifiers = [
+            "pomodoro-\(sessionId.uuidString)",
+            "pomodoro-scheduled-\(sessionId.uuidString)"
+        ]
+        notificationCenter.removePendingNotificationRequests(withIdentifiers: identifiers)
+        logger.info("Cancelled Pomodoro notifications for session: \(sessionId)")
     }
     
     // MARK: - Private Helpers

@@ -15,6 +15,7 @@ extension Notification.Name {
     static let showUpcomingView = Notification.Name("showUpcomingView")
     static let showCalendarView = Notification.Name("showCalendarView")
     static let showAllView = Notification.Name("showAllView")
+    static let showPomodoroView = Notification.Name("showPomodoroView")
 }
 
 @main
@@ -23,7 +24,7 @@ struct todoaiApp: App {
     @StateObject private var backgroundTaskManager = BackgroundTaskManager.shared
     
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([Todo.self, TimeRange.self, RecurrenceConfig.self])
+        let schema = Schema([Todo.self, TimeRange.self, RecurrenceConfig.self, PomodoroSession.self, PomodoroSettings.self])
         
         // Create a dedicated directory for our app data
         let appSupportURL = URL.applicationSupportDirectory.appendingPathComponent("TodoAI")
@@ -134,6 +135,11 @@ struct todoaiApp: App {
                     NotificationCenter.default.post(name: .showAllView, object: nil)
                 }
                 .keyboardShortcut("a", modifiers: [])
+                
+                Button("Show Pomodoro") {
+                    NotificationCenter.default.post(name: .showPomodoroView, object: nil)
+                }
+                .keyboardShortcut("p", modifiers: [])
             }
         }
     }

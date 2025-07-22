@@ -82,6 +82,7 @@ struct ModernSpeedContentView: View {
         case today = "Today"
         case upcoming = "Upcoming" 
         case all = "All"
+        case pomodoro = "Pomodoro"
         
         var icon: String {
             switch self {
@@ -89,6 +90,7 @@ struct ModernSpeedContentView: View {
             case .today: return "calendar.badge.clock"
             case .upcoming: return "arrow.up.right"
             case .all: return "list.bullet"
+            case .pomodoro: return "timer"
             }
         }
     }
@@ -151,6 +153,7 @@ struct ModernSpeedContentView: View {
         case .today: baseTodos = todayTodos 
         case .upcoming: baseTodos = upcomingTodos
         case .all: baseTodos = todos
+        case .pomodoro: baseTodos = []
         }
         
         // Sort with completed todos at the bottom
@@ -174,6 +177,9 @@ struct ModernSpeedContentView: View {
         case .today, .upcoming, .all:
             // For other views, use the display todos
             return displayTodos
+        case .pomodoro:
+            // Pomodoro view doesn't have navigable todos
+            return []
         }
     }
     
@@ -677,6 +683,12 @@ struct ModernSpeedContentView: View {
                                 insertion: .move(edge: .trailing).combined(with: .opacity),
                                 removal: .move(edge: .leading).combined(with: .opacity)
                             ))
+                    } else if currentView == .pomodoro {
+                        PomodoroView()
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .move(edge: .leading).combined(with: .opacity)
+                            ))
                     } else {
                         speedTodoList
                             .transition(.asymmetric(
@@ -756,6 +768,11 @@ struct ModernSpeedContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showAllView)) { _ in
             withAnimation(.easeInOut(duration: 0.2)) {
                 currentView = .all
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showPomodoroView)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                currentView = .pomodoro
             }
         }
         .onChange(of: selectedDate) { oldValue, newValue in
@@ -900,6 +917,7 @@ struct ModernSpeedContentView: View {
         case .upcoming: return "U"
         case .calendar: return "C"
         case .all: return "A"
+        case .pomodoro: return "P"
         }
     }
     
