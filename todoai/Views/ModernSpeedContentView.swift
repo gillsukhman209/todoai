@@ -493,6 +493,108 @@ struct ModernSpeedContentView: View {
         print("🎯 Reordered todos - moved \(draggedTodo.title) from \(sourceIndex) to \(adjustedTargetIndex)")
     }
     
+    // MARK: - Keyboard Reordering Methods
+    
+    /// Move selected todo up one position
+    private func moveSelectedTodoUp() {
+        guard let selectedId = selectedTodoId else { return }
+        let currentTodos = displayTodos
+        guard let currentIndex = currentTodos.firstIndex(where: { $0.id == selectedId }) else { return }
+        guard currentIndex > 0 else { return } // Already at top
+        
+        let targetIndex = currentIndex - 1
+        reorderTodos(from: currentIndex, to: targetIndex)
+        
+        // Add visual feedback
+        withAnimation(.easeInOut(duration: 0.2)) {
+            // Animation will be handled by the todo card updates
+        }
+        
+        // Haptic feedback
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        
+        print("🔑 Moved todo up from \(currentIndex) to \(targetIndex)")
+    }
+    
+    /// Move selected todo down one position
+    private func moveSelectedTodoDown() {
+        guard let selectedId = selectedTodoId else { 
+            print("🔑 moveSelectedTodoDown: No selected todo ID")
+            return 
+        }
+        let currentTodos = displayTodos
+        print("🔑 moveSelectedTodoDown: Total todos: \(currentTodos.count)")
+        guard let currentIndex = currentTodos.firstIndex(where: { $0.id == selectedId }) else { 
+            print("🔑 moveSelectedTodoDown: Could not find todo with ID \(selectedId)")
+            return 
+        }
+        print("🔑 moveSelectedTodoDown: Current index: \(currentIndex)")
+        guard currentIndex < currentTodos.count - 1 else { 
+            print("🔑 moveSelectedTodoDown: Already at bottom (index \(currentIndex) of \(currentTodos.count - 1))")
+            return 
+        } // Already at bottom
+        
+        // For moving down, we need to account for the drag-drop logic
+        // When moving from index i to index i+1, we need to pass i+2 as target
+        // because the reorderTodos method adjusts for removal
+        let targetIndex = currentIndex + 2
+        print("🔑 moveSelectedTodoDown: Moving from \(currentIndex) to target \(targetIndex)")
+        reorderTodos(from: currentIndex, to: targetIndex)
+        
+        // Add visual feedback
+        withAnimation(.easeInOut(duration: 0.2)) {
+            // Animation will be handled by the todo card updates
+        }
+        
+        // Haptic feedback
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        
+        print("🔑 Moved todo down from \(currentIndex) to \(targetIndex)")
+    }
+    
+    /// Move selected todo to top position
+    private func moveSelectedTodoToTop() {
+        guard let selectedId = selectedTodoId else { return }
+        let currentTodos = displayTodos
+        guard let currentIndex = currentTodos.firstIndex(where: { $0.id == selectedId }) else { return }
+        guard currentIndex > 0 else { return } // Already at top
+        
+        let targetIndex = 0
+        reorderTodos(from: currentIndex, to: targetIndex)
+        
+        // Add visual feedback
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            // Animation will be handled by the todo card updates
+        }
+        
+        // Stronger haptic feedback for large moves
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        
+        print("🔑 Moved todo to top from \(currentIndex) to \(targetIndex)")
+    }
+    
+    /// Move selected todo to bottom position
+    private func moveSelectedTodoToBottom() {
+        guard let selectedId = selectedTodoId else { return }
+        let currentTodos = displayTodos
+        guard let currentIndex = currentTodos.firstIndex(where: { $0.id == selectedId }) else { return }
+        guard currentIndex < currentTodos.count - 1 else { return } // Already at bottom
+        
+        // For moving to bottom, pass count as target (will be adjusted to count-1 after removal)
+        let targetIndex = currentTodos.count
+        reorderTodos(from: currentIndex, to: targetIndex)
+        
+        // Add visual feedback
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            // Animation will be handled by the todo card updates
+        }
+        
+        // Stronger haptic feedback for large moves
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        
+        print("🔑 Moved todo to bottom from \(currentIndex) to \(targetIndex)")
+    }
+    
     // MARK: - Persistence Helpers
     
     /// Save the model context with error handling
@@ -1383,6 +1485,23 @@ struct ModernSpeedContentView: View {
                 print("🔑 Delegating to calendar handler")
                 return handleCalendarKeyPress(keyPress)
             } else {
+                // Check for keyboard drag shortcuts first
+                if keyPress.modifiers.contains(.command) && keyPress.modifiers.contains(.shift) {
+                    if keyPress.modifiers.contains(.control) {
+                        // Cmd+Shift+Ctrl+Up: Move to top
+                        if keyboardMode == .navigation && selectedTodoId != nil {
+                            moveSelectedTodoToTop()
+                            return .handled
+                        }
+                    } else {
+                        // Cmd+Shift+Up: Move up one position
+                        if keyboardMode == .navigation && selectedTodoId != nil {
+                            moveSelectedTodoUp()
+                            return .handled
+                        }
+                    }
+                }
+                
                 // Always handle up arrow for navigation, regardless of input focus
                 if keyboardMode == .editing {
                     print("🔑 In editing mode, ignoring up arrow")
@@ -1417,6 +1536,23 @@ struct ModernSpeedContentView: View {
                 print("🔑 Delegating to calendar handler")
                 return handleCalendarKeyPress(keyPress)
             } else {
+                // Check for keyboard drag shortcuts first
+                if keyPress.modifiers.contains(.command) && keyPress.modifiers.contains(.shift) {
+                    if keyPress.modifiers.contains(.control) {
+                        // Cmd+Shift+Ctrl+Down: Move to bottom
+                        if keyboardMode == .navigation && selectedTodoId != nil {
+                            moveSelectedTodoToBottom()
+                            return .handled
+                        }
+                    } else {
+                        // Cmd+Shift+Down: Move down one position
+                        if keyboardMode == .navigation && selectedTodoId != nil {
+                            moveSelectedTodoDown()
+                            return .handled
+                        }
+                    }
+                }
+                
                 // Always handle down arrow for navigation, regardless of input focus
                 if keyboardMode == .editing {
                     print("🔑 In editing mode, ignoring down arrow")
