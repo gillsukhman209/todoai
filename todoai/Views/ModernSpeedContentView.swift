@@ -875,6 +875,7 @@ struct ModernSpeedContentView: View {
         .preferredColorScheme(.dark)
         .focusable(true)
         .focused($isMainViewFocused)
+        .focusEffectDisabled()
         .onKeyPress { keyPress in
             return handleGlobalKeyPress(keyPress)
         }
