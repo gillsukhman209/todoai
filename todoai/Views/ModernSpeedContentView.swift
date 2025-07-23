@@ -744,11 +744,6 @@ struct ModernSpeedContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .focusTaskInput)) { _ in
             // Handle Command+N from menu
             isInputFocused = true
-            if currentView != .today {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    currentView = .today
-                }
-            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showTodayView)) { _ in
             withAnimation(.easeInOut(duration: 0.2)) {

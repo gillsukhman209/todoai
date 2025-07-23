@@ -15,7 +15,7 @@ struct PomodoroView: View {
             // Futuristic animated background
             futuristicBackground
             
-            VStack(spacing: 0) {
+            VStack(alignment: .center, spacing: 0) {
                 // Modern header with futuristic styling
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -79,21 +79,93 @@ struct PomodoroView: View {
                 .padding(.bottom, 32)
                 
                 // Futuristic timer section
-                VStack(spacing: 36) {
+                VStack(spacing: 24) {
                     // Enhanced circular progress with multiple layers and effects
                     ZStack {
                         futuristicProgressRings
                         futuristicCenterContent
                     }
+                    .padding(.horizontal, 32)
                     
-                    // Enhanced controls with futuristic styling
+                    // COMPLETELY NEW BUTTON SECTION - START FROM SCRATCH
                     if pomodoroManager.isActive {
-                        futuristicActiveControls
+                        VStack {
+                            Spacer().frame(height: 0)
+                            
+                            HStack(spacing: 20) {
+                                Spacer()
+                                
+                                // RECREATED PAUSE BUTTON 
+                                Button {
+                                    if pomodoroManager.state == PomodoroState.running {
+                                        pomodoroManager.pauseSession()
+                                    } else {
+                                        pomodoroManager.resumeSession()
+                                    }
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: pomodoroManager.state == PomodoroState.running ? "pause.fill" : "play.fill")
+                                            .font(.system(size: 16, weight: .bold))
+                                        Text(pomodoroManager.state == PomodoroState.running ? "Pause" : "Resume")
+                                            .font(.system(size: 15, weight: .bold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(height: 50)
+                                    .frame(minWidth: 130)
+                                    .background(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .clipShape(RoundedRectangle(cornerRadius: 25))
+                                    .shadow(color: .blue.opacity(0.5), radius: 15)
+                                }
+                                .buttonStyle(.plain)
+                                
+                                // RECREATED STOP BUTTON
+                                Button {
+                                    pomodoroManager.stopSession()
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "stop.fill")
+                                            .font(.system(size: 16, weight: .bold))
+                                        Text("Stop")
+                                            .font(.system(size: 15, weight: .bold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(height: 50)
+                                    .frame(minWidth: 110)
+                                    .background(LinearGradient(colors: [.red, .orange], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .clipShape(RoundedRectangle(cornerRadius: 25))
+                                    .shadow(color: .red.opacity(0.5), radius: 15)
+                                }
+                                .buttonStyle(.plain)
+                                
+                                // RECREATED MENU BUTTON
+                                Menu {
+                                    Button("Restart Session") {
+                                        pomodoroManager.restartSession()
+                                    }
+                                    Button("Open in Window") {
+                                        openPomodoroWindow()
+                                    }
+                                    Divider()
+                                    Button("Delete Session", role: .destructive) {
+                                        pomodoroManager.deleteSession()
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.cyan)
+                                        .frame(width: 50, height: 50)
+                                        .background(RoundedRectangle(cornerRadius: 25).fill(.ultraThinMaterial))
+                                        .shadow(color: .cyan.opacity(0.3), radius: 10)
+                                }
+                                .menuStyle(.borderlessButton)
+                                
+                                Spacer()
+                            }
+                        }
                     } else {
                         futuristicInactiveControls
                     }
                 }
-                .padding(.horizontal, 32)
                 
                 Spacer(minLength: 20)
                 
@@ -207,7 +279,7 @@ struct PomodoroView: View {
     private func sessionNameText(_ name: String) -> some View {
         Text(name)
             .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(sessionNameGradient)
+            .foregroundColor(.white.opacity(0.9))
             .multilineTextAlignment(.center)
             .lineLimit(2)
     }
@@ -216,10 +288,9 @@ struct PomodoroView: View {
     private var timeDisplayText: some View {
         Text(pomodoroManager.formattedTimeRemaining)
             .font(.system(size: 64, weight: .bold, design: .rounded))
-            .foregroundStyle(timeDisplayGradient)
+            .foregroundColor(.white)
             .contentTransition(.numericText())
-            .shadow(color: Color(pomodoroManager.sessionTypeColor), radius: 20)
-            .shadow(color: .white.opacity(0.5), radius: 10)
+            .shadow(color: .black, radius: 2)
     }
     
     @ViewBuilder
