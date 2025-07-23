@@ -174,9 +174,12 @@ struct ModernSpeedContentView: View {
         case .calendar:
             // In calendar view, navigate through todos for selected date
             return todosForDate(selectedDate)
-        case .today, .upcoming, .all:
+        case .today, .all:
             // For other views, use the display todos
             return displayTodos
+        case .upcoming:
+            // For upcoming view, flatten all grouped todos to match what's displayed
+            return groupUpcomingTodosByDate().flatMap { $0.1 }
         case .pomodoro:
             // Pomodoro view doesn't have navigable todos
             return []
@@ -473,8 +476,8 @@ struct ModernSpeedContentView: View {
     
     
     /// Reorder todos by updating their sort orders
-    private func reorderTodos(from sourceIndex: Int, to targetIndex: Int) {
-        let currentTodos = displayTodos
+    private func reorderTodos(from sourceIndex: Int, to targetIndex: Int, todosList: [Todo]? = nil) {
+        let currentTodos = todosList ?? displayTodos
         guard sourceIndex >= 0 && sourceIndex < currentTodos.count &&
               targetIndex >= 0 && targetIndex <= currentTodos.count else { return }
         
@@ -504,22 +507,27 @@ struct ModernSpeedContentView: View {
     /// Move selected todo up one position
     private func moveSelectedTodoUp() {
         guard let selectedId = selectedTodoId else { return }
-        let currentTodos = displayTodos
-        guard let currentIndex = currentTodos.firstIndex(where: { $0.id == selectedId }) else { return }
-        guard currentIndex > 0 else { return } // Already at top
         
-        let targetIndex = currentIndex - 1
-        reorderTodos(from: currentIndex, to: targetIndex)
-        
-        // Add visual feedback
-        withAnimation(.easeInOut(duration: 0.2)) {
-            // Animation will be handled by the todo card updates
+        if currentView == .upcoming {
+            moveSelectedTodoUpInUpcomingView()
+        } else {
+            let currentTodos = navigableTodos
+            guard let currentIndex = currentTodos.firstIndex(where: { $0.id == selectedId }) else { return }
+            guard currentIndex > 0 else { return } // Already at top
+            
+            let targetIndex = currentIndex - 1
+            reorderTodos(from: currentIndex, to: targetIndex, todosList: currentTodos)
+            
+            // Add visual feedback
+            withAnimation(.easeInOut(duration: 0.2)) {
+                // Animation will be handled by the todo card updates
+            }
+            
+            // Haptic feedback
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            
+            print("🔑 Moved todo up from \(currentIndex) to \(targetIndex)")
         }
-        
-        // Haptic feedback
-        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-        
-        print("🔑 Moved todo up from \(currentIndex) to \(targetIndex)")
     }
     
     /// Move selected todo down one position
@@ -528,45 +536,50 @@ struct ModernSpeedContentView: View {
             print("🔑 moveSelectedTodoDown: No selected todo ID")
             return 
         }
-        let currentTodos = displayTodos
-        print("🔑 moveSelectedTodoDown: Total todos: \(currentTodos.count)")
-        guard let currentIndex = currentTodos.firstIndex(where: { $0.id == selectedId }) else { 
-            print("🔑 moveSelectedTodoDown: Could not find todo with ID \(selectedId)")
-            return 
+        
+        if currentView == .upcoming {
+            moveSelectedTodoDownInUpcomingView()
+        } else {
+            let currentTodos = navigableTodos
+            print("🔑 moveSelectedTodoDown: Total todos: \(currentTodos.count)")
+            guard let currentIndex = currentTodos.firstIndex(where: { $0.id == selectedId }) else { 
+                print("🔑 moveSelectedTodoDown: Could not find todo with ID \(selectedId)")
+                return 
+            }
+            print("🔑 moveSelectedTodoDown: Current index: \(currentIndex)")
+            guard currentIndex < currentTodos.count - 1 else { 
+                print("🔑 moveSelectedTodoDown: Already at bottom (index \(currentIndex) of \(currentTodos.count - 1))")
+                return 
+            } // Already at bottom
+            
+            // For moving down, we need to account for the drag-drop logic
+            // When moving from index i to index i+1, we need to pass i+2 as target
+            // because the reorderTodos method adjusts for removal
+            let targetIndex = currentIndex + 2
+            print("🔑 moveSelectedTodoDown: Moving from \(currentIndex) to target \(targetIndex)")
+            reorderTodos(from: currentIndex, to: targetIndex, todosList: currentTodos)
+            
+            // Add visual feedback
+            withAnimation(.easeInOut(duration: 0.2)) {
+                // Animation will be handled by the todo card updates
+            }
+            
+            // Haptic feedback
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            
+            print("🔑 Moved todo down from \(currentIndex) to \(targetIndex)")
         }
-        print("🔑 moveSelectedTodoDown: Current index: \(currentIndex)")
-        guard currentIndex < currentTodos.count - 1 else { 
-            print("🔑 moveSelectedTodoDown: Already at bottom (index \(currentIndex) of \(currentTodos.count - 1))")
-            return 
-        } // Already at bottom
-        
-        // For moving down, we need to account for the drag-drop logic
-        // When moving from index i to index i+1, we need to pass i+2 as target
-        // because the reorderTodos method adjusts for removal
-        let targetIndex = currentIndex + 2
-        print("🔑 moveSelectedTodoDown: Moving from \(currentIndex) to target \(targetIndex)")
-        reorderTodos(from: currentIndex, to: targetIndex)
-        
-        // Add visual feedback
-        withAnimation(.easeInOut(duration: 0.2)) {
-            // Animation will be handled by the todo card updates
-        }
-        
-        // Haptic feedback
-        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-        
-        print("🔑 Moved todo down from \(currentIndex) to \(targetIndex)")
     }
     
     /// Move selected todo to top position
     private func moveSelectedTodoToTop() {
         guard let selectedId = selectedTodoId else { return }
-        let currentTodos = displayTodos
+        let currentTodos = navigableTodos
         guard let currentIndex = currentTodos.firstIndex(where: { $0.id == selectedId }) else { return }
         guard currentIndex > 0 else { return } // Already at top
         
         let targetIndex = 0
-        reorderTodos(from: currentIndex, to: targetIndex)
+        reorderTodos(from: currentIndex, to: targetIndex, todosList: currentTodos)
         
         // Add visual feedback
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -582,13 +595,13 @@ struct ModernSpeedContentView: View {
     /// Move selected todo to bottom position
     private func moveSelectedTodoToBottom() {
         guard let selectedId = selectedTodoId else { return }
-        let currentTodos = displayTodos
+        let currentTodos = navigableTodos
         guard let currentIndex = currentTodos.firstIndex(where: { $0.id == selectedId }) else { return }
         guard currentIndex < currentTodos.count - 1 else { return } // Already at bottom
         
         // For moving to bottom, pass count as target (will be adjusted to count-1 after removal)
         let targetIndex = currentTodos.count
-        reorderTodos(from: currentIndex, to: targetIndex)
+        reorderTodos(from: currentIndex, to: targetIndex, todosList: currentTodos)
         
         // Add visual feedback
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -599,6 +612,157 @@ struct ModernSpeedContentView: View {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         
         print("🔑 Moved todo to bottom from \(currentIndex) to \(targetIndex)")
+    }
+    
+    // MARK: - Upcoming View Specific Reordering
+    
+    /// Move selected todo up within its day in upcoming view
+    private func moveSelectedTodoUpInUpcomingView() {
+        guard let selectedId = selectedTodoId,
+              let selectedTodo = todos.first(where: { $0.id == selectedId }) else {
+            print("🔑 Upcoming Up: No selected todo found")
+            return
+        }
+        
+        let groupedTodos = groupUpcomingTodosByDate()
+        
+        // Find which day group contains this todo
+        guard let dayGroupIndex = groupedTodos.firstIndex(where: { _, dayTodos in
+            dayTodos.contains { $0.id == selectedId }
+        }) else {
+            print("🔑 Upcoming Up: Todo not found in any day group")
+            return
+        }
+        
+        let (date, dayTodos) = groupedTodos[dayGroupIndex]
+        guard let todoIndexInDay = dayTodos.firstIndex(where: { $0.id == selectedId }) else {
+            print("🔑 Upcoming Up: Todo index not found in day")
+            return
+        }
+        
+        if todoIndexInDay > 0 {
+            // Move within the same day - use more robust reordering
+            let targetTodo = dayTodos[todoIndexInDay - 1]
+            
+            // Get all todos for this day and reorder them properly
+            let todosForThisDay = dayTodos.sorted { $0.sortOrder < $1.sortOrder }
+            
+            // Create new sort orders with gaps
+            for (index, todo) in todosForThisDay.enumerated() {
+                let newOrder = index * 1000 // Large gaps to avoid conflicts
+                if todo.id == selectedTodo.id {
+                    // This todo should be at targetIndex position
+                    todo.sortOrder = (todoIndexInDay - 1) * 1000
+                } else if todo.id == targetTodo.id {
+                    // Target todo moves down one position
+                    todo.sortOrder = todoIndexInDay * 1000
+                } else if index < todoIndexInDay - 1 {
+                    // Todos before the swap position stay the same
+                    todo.sortOrder = index * 1000
+                } else if index > todoIndexInDay {
+                    // Todos after the swap position stay the same
+                    todo.sortOrder = index * 1000
+                }
+            }
+            
+            print("🔑 Upcoming Up: Moved todo '\(selectedTodo.title)' within day from index \(todoIndexInDay) to \(todoIndexInDay - 1)")
+        } else if dayGroupIndex > 0 {
+            // Move to the previous day (to the end of that day's todos)
+            let (previousDate, previousDayTodos) = groupedTodos[dayGroupIndex - 1]
+            
+            // Update the todo's due date to the previous day
+            selectedTodo.dueDate = previousDate
+            
+            // Set sort order to be after the last todo in the previous day
+            if let lastTodoInPreviousDay = previousDayTodos.last {
+                selectedTodo.sortOrder = lastTodoInPreviousDay.sortOrder + 100
+            } else {
+                selectedTodo.sortOrder = 0
+            }
+            
+            print("🔑 Upcoming Up: Moved todo to previous day (\(previousDate))")
+        } else {
+            print("🔑 Upcoming Up: Already at the top of the first day")
+            return
+        }
+        
+        // Save changes and provide feedback
+        saveTodoChanges()
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+    }
+    
+    /// Move selected todo down within its day in upcoming view  
+    private func moveSelectedTodoDownInUpcomingView() {
+        guard let selectedId = selectedTodoId,
+              let selectedTodo = todos.first(where: { $0.id == selectedId }) else {
+            print("🔑 Upcoming Down: No selected todo found")
+            return
+        }
+        
+        let groupedTodos = groupUpcomingTodosByDate()
+        
+        // Find which day group contains this todo
+        guard let dayGroupIndex = groupedTodos.firstIndex(where: { _, dayTodos in
+            dayTodos.contains { $0.id == selectedId }
+        }) else {
+            print("🔑 Upcoming Down: Todo not found in any day group")
+            return
+        }
+        
+        let (date, dayTodos) = groupedTodos[dayGroupIndex]
+        guard let todoIndexInDay = dayTodos.firstIndex(where: { $0.id == selectedId }) else {
+            print("🔑 Upcoming Down: Todo index not found in day")
+            return
+        }
+        
+        if todoIndexInDay < dayTodos.count - 1 {
+            // Move within the same day - use more robust reordering
+            let targetTodo = dayTodos[todoIndexInDay + 1]
+            
+            // Get all todos for this day and reorder them properly
+            let todosForThisDay = dayTodos.sorted { $0.sortOrder < $1.sortOrder }
+            
+            // Create new sort orders with gaps
+            for (index, todo) in todosForThisDay.enumerated() {
+                if todo.id == selectedTodo.id {
+                    // This todo should be at targetIndex position
+                    todo.sortOrder = (todoIndexInDay + 1) * 1000
+                } else if todo.id == targetTodo.id {
+                    // Target todo moves up one position
+                    todo.sortOrder = todoIndexInDay * 1000
+                } else if index < todoIndexInDay {
+                    // Todos before the swap position stay the same
+                    todo.sortOrder = index * 1000
+                } else if index > todoIndexInDay + 1 {
+                    // Todos after the swap position stay the same
+                    todo.sortOrder = index * 1000
+                }
+            }
+            
+            print("🔑 Upcoming Down: Moved todo '\(selectedTodo.title)' within day from index \(todoIndexInDay) to \(todoIndexInDay + 1)")
+        } else if dayGroupIndex < groupedTodos.count - 1 {
+            // Move to the next day (to the beginning of that day's todos)
+            let (nextDate, nextDayTodos) = groupedTodos[dayGroupIndex + 1]
+            
+            // Update the todo's due date to the next day
+            selectedTodo.dueDate = nextDate
+            
+            // Set sort order to be before the first todo in the next day
+            if let firstTodoInNextDay = nextDayTodos.first {
+                selectedTodo.sortOrder = firstTodoInNextDay.sortOrder - 100
+            } else {
+                selectedTodo.sortOrder = 0
+            }
+            
+            print("🔑 Upcoming Down: Moved todo to next day (\(nextDate))")
+        } else {
+            print("🔑 Upcoming Down: Already at the bottom of the last day")
+            return
+        }
+        
+        // Save changes and provide feedback
+        saveTodoChanges()
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
     
     // MARK: - Persistence Helpers
@@ -1015,6 +1179,12 @@ struct ModernSpeedContentView: View {
     private var upcomingTimelineView: some View {
         UpcomingTimelineView(
             groupedTodos: groupUpcomingTodosByDate(),
+            selectedTodoId: selectedTodoId,
+            editingTodoId: editingTodoId,
+            editingText: $editingText,
+            isDragActive: isDragActive,
+            draggedTodo: draggedTodo,
+            dropTargetDate: nil,
             onToggleComplete: { todo in
                 // Just save the changes - the toggle is handled by DaySection
                 saveTodoChanges()
@@ -1022,6 +1192,27 @@ struct ModernSpeedContentView: View {
             onDeleteTodo: { todo in
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     modelContext.delete(todo)
+                    saveTodoChanges()
+                }
+            },
+            onSelectTodo: { todo in
+                selectedTodoId = todo.id
+                keyboardMode = .navigation
+            },
+            onSaveEdit: saveEditedTodo,
+            onCancelEdit: cancelEditingTodo,
+            onDragStart: { todo, location in
+                startDragging(todo: todo, at: location)
+            },
+            onDragChanged: { location in
+                updateDrag(location: location)
+            },
+            onDragEnd: {
+                endDrag()
+            },
+            onMoveTodoToDate: { todo, date in
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    todo.dueDate = date
                     saveTodoChanges()
                 }
             }
@@ -2602,6 +2793,12 @@ struct CompactTodoCard: View {
     let onCancelEdit: () -> Void
     let onSelect: () -> Void
     
+    // MARK: - Drag and Drop Properties
+    let isBeingDragged: Bool
+    let onDragStart: (CGPoint) -> Void
+    let onDragChanged: (CGPoint) -> Void
+    let onDragEnd: () -> Void
+    
     @State private var swipeOffset: CGFloat = 0
     @FocusState private var isEditFieldFocused: Bool
     
@@ -2627,9 +2824,28 @@ struct CompactTodoCard: View {
     }
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Completion button - with explicit tap gesture to ensure it works
-            ZStack {
+        HStack(spacing: 0) {
+            // Drag handle
+            DragHandle()
+                .opacity(isBeingDragged ? 0.3 : 1.0)
+                .draggable(todo.id.uuidString)
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 5, coordinateSpace: .global)
+                        .onChanged { value in
+                            if !isBeingDragged {
+                                onDragStart(value.startLocation)
+                            }
+                            onDragChanged(value.location)
+                        }
+                        .onEnded { _ in
+                            onDragEnd()
+                        }
+                )
+            
+            // Card content
+            HStack(spacing: 12) {
+                // Completion button - with explicit tap gesture to ensure it works
+                ZStack {
                 Circle()
                     .stroke(todo.isCompletedOnDate(date) ? .green : .white.opacity(0.4), lineWidth: 2)
                     .frame(width: 20, height: 20)
@@ -2708,11 +2924,11 @@ struct CompactTodoCard: View {
                         .opacity(todo.isCompletedOnDate(date) ? 0.5 : 0.8)
                 }
             }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(backgroundFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -2720,11 +2936,12 @@ struct CompactTodoCard: View {
                 )
         )
         .offset(x: swipeOffset)
-        .gesture(
-            DragGesture(minimumDistance: 15)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 15, coordinateSpace: .local)
                 .onChanged { value in
-                    // Only start swiping if the drag starts from the right side (not on the button)
-                    if value.startLocation.x > 40 {
+                    // Only start swiping if the drag starts from the right side (not on drag handle)
+                    // Drag handle is ~32px wide, add some buffer
+                    if value.startLocation.x > 50 {
                         if value.translation.width < 0 {
                             swipeOffset = max(value.translation.width * 0.3, -80)
                         } else if value.translation.width > 0 {
@@ -2734,7 +2951,7 @@ struct CompactTodoCard: View {
                 }
                 .onEnded { value in
                     // Only complete swipe actions if drag started from the right side
-                    if value.startLocation.x > 40 {
+                    if value.startLocation.x > 50 {
                         if value.translation.width > 60 {
                             onComplete()
                         } else if value.translation.width < -60 {
@@ -2750,6 +2967,8 @@ struct CompactTodoCard: View {
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: swipeOffset)
         .onTapGesture {
             onSelect()
+        }
+        .opacity(isBeingDragged ? 0.5 : 1.0)
         }
     }
     
@@ -2786,8 +3005,22 @@ struct DaySection: View {
     let date: Date
     let todos: [Todo]
     let isFirst: Bool
+    let selectedTodoId: UUID?
+    let editingTodoId: UUID?
+    @Binding var editingText: String
+    let isDragActive: Bool
+    let draggedTodo: Todo?
     let onToggleComplete: (Todo) -> Void
     let onDeleteTodo: (Todo) -> Void
+    let onSelectTodo: (Todo) -> Void
+    let onSaveEdit: () -> Void
+    let onCancelEdit: () -> Void
+    let onDragStart: (Todo, CGPoint) -> Void
+    let onDragChanged: (CGPoint) -> Void
+    let onDragEnd: () -> Void
+    let onMoveTodoToDate: (Todo, Date) -> Void
+    
+    @State private var isDropTargeted = false
     
     private var dayTitle: String {
         let calendar = Calendar.current
@@ -2904,19 +3137,53 @@ struct DaySection: View {
                             onToggleComplete(todo)
                         },
                         onDelete: { onDeleteTodo(todo) },
-                        isSelected: false, // TODO: Implement upcoming view keyboard navigation
-                        isEditing: false,
-                        editingText: .constant(""),
-                        onSaveEdit: {},
-                        onCancelEdit: {},
+                        isSelected: selectedTodoId == todo.id,
+                        isEditing: editingTodoId == todo.id,
+                        editingText: $editingText,
+                        onSaveEdit: onSaveEdit,
+                        onCancelEdit: onCancelEdit,
                         onSelect: {
-                            // TODO: Implement selection in upcoming view
-                        }
+                            onSelectTodo(todo)
+                        },
+                        isBeingDragged: draggedTodo?.id == todo.id,
+                        onDragStart: { location in
+                            onDragStart(todo, location)
+                        },
+                        onDragChanged: onDragChanged,
+                        onDragEnd: onDragEnd
                     )
                     .padding(.leading, 40) // Align with timeline
                 }
             }
             .padding(.bottom, 24)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isDropTargeted ? Color.blue.opacity(0.1) : Color.clear)
+                .animation(.easeInOut(duration: 0.2), value: isDropTargeted)
+        )
+        .dropDestination(for: String.self) { droppedItems, location in
+            // Handle todo drop from other days
+            guard let todoIdString = droppedItems.first,
+                  let todoId = UUID(uuidString: todoIdString) else {
+                isDropTargeted = false
+                return false
+            }
+            
+            // Find the dragged todo - it might not be in this day's todos
+            if let todo = draggedTodo, todo.id == todoId {
+                // Move todo to this date if it's different
+                if todo.dueDate != date {
+                    onMoveTodoToDate(todo, date)
+                }
+                isDropTargeted = false
+                return true
+            }
+            
+            isDropTargeted = false
+            return false
+        } isTargeted: { targeted in
+            isDropTargeted = targeted
         }
     }
 }
@@ -2924,8 +3191,21 @@ struct DaySection: View {
 /// Main upcoming timeline view
 struct UpcomingTimelineView: View {
     let groupedTodos: [(Date, [Todo])]
+    let selectedTodoId: UUID?
+    let editingTodoId: UUID?
+    @Binding var editingText: String
+    let isDragActive: Bool
+    let draggedTodo: Todo?
+    let dropTargetDate: Date?
     let onToggleComplete: (Todo) -> Void
     let onDeleteTodo: (Todo) -> Void
+    let onSelectTodo: (Todo) -> Void
+    let onSaveEdit: () -> Void
+    let onCancelEdit: () -> Void
+    let onDragStart: (Todo, CGPoint) -> Void
+    let onDragChanged: (CGPoint) -> Void
+    let onDragEnd: () -> Void
+    let onMoveTodoToDate: (Todo, Date) -> Void
     
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -2938,12 +3218,24 @@ struct UpcomingTimelineView: View {
                             date: dayGroup.0,
                             todos: dayGroup.1,
                             isFirst: index == 0,
+                            selectedTodoId: selectedTodoId,
+                            editingTodoId: editingTodoId,
+                            editingText: $editingText,
+                            isDragActive: isDragActive,
+                            draggedTodo: draggedTodo,
                             onToggleComplete: { todo in
                                 onToggleComplete(todo)
                             },
                             onDeleteTodo: { todo in
                                 onDeleteTodo(todo)
-                            }
+                            },
+                            onSelectTodo: onSelectTodo,
+                            onSaveEdit: onSaveEdit,
+                            onCancelEdit: onCancelEdit,
+                            onDragStart: onDragStart,
+                            onDragChanged: onDragChanged,
+                            onDragEnd: onDragEnd,
+                            onMoveTodoToDate: onMoveTodoToDate
                         )
                     }
                 }
