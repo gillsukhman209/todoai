@@ -104,7 +104,8 @@ struct todoaiApp: App {
         }
         .modelContainer(sharedModelContainer)
         .defaultSize(width: 800, height: 600)
-        .windowToolbarStyle(.unified(showsTitle: true))
+        .windowResizability(.contentSize)
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Task") {
