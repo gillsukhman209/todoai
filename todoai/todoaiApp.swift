@@ -16,7 +16,7 @@ struct todoaiApp: App {
     
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([Todo.self, TimeRange.self, RecurrenceConfig.self])
-        let modelConfiguration = ModelConfiguration(
+            let modelConfiguration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false
         )
@@ -39,13 +39,13 @@ struct todoaiApp: App {
             
             do {
                 return try ModelContainer(for: schema, configurations: config)
-            } catch {
+        } catch {
                 print("Second attempt failed: \(error)")
                 // Last resort: create a basic persistent container
                 do {
                     return try ModelContainer(for: Todo.self)
-                } catch {
-                    fatalError("Could not create ModelContainer: \(error)")
+            } catch {
+                fatalError("Could not create ModelContainer: \(error)")
                 }
             }
         }

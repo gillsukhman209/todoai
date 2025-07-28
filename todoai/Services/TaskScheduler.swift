@@ -80,6 +80,9 @@ class TaskScheduler: ObservableObject {
     
     /// Convert existing Todo to EnhancedTask and schedule
     func convertAndScheduleTask(_ todo: Todo, withSchedule schedule: EnhancedSchedule) async -> SchedulingResult {
+        logger.info("Converting and scheduling task: '\(todo.title)'")
+        logger.info("Schedule details: type=\(schedule.type), weekdays=\(schedule.weekdays?.map { $0.rawValue } ?? []), timeRange=\(schedule.timeRange?.startTime.formatted(date: .abbreviated, time: .shortened) ?? "nil")")
+        
         let enhancedTask = EnhancedTask(
             title: todo.title,
             notes: "",
@@ -93,11 +96,16 @@ class TaskScheduler: ObservableObject {
             difficulty: .medium
         )
         
+        logger.info("Created EnhancedTask with ID: \(enhancedTask.id)")
+        
         let result = await scheduleTask(enhancedTask)
         
         // Update the original Todo with schedule information if successful
         if case .success = result {
             updateTodoWithScheduleInfo(todo, schedule: schedule)
+            logger.info("Successfully scheduled and updated Todo: '\(todo.title)'")
+        } else {
+            logger.error("Failed to schedule task: '\(todo.title)' - Result: \(result)")
         }
         
         return result
@@ -125,7 +133,12 @@ class TaskScheduler: ObservableObject {
                 config.type = .yearly
             case .weekdays:
                 config.type = .specificDays
-                config.specificWeekdays = [1, 2, 3, 4, 5] // Monday to Friday
+                // Use actual weekdays from schedule, or default to Monday-Friday
+                if let weekdays = schedule.weekdays {
+                    config.specificWeekdays = weekdays.map { $0.rawValue }
+                } else {
+                    config.specificWeekdays = [1, 2, 3, 4, 5] // Monday to Friday
+                }
             default:
                 config.type = .daily // Default fallback
             }
@@ -138,6 +151,10 @@ class TaskScheduler: ObservableObject {
                     startTime: timeRange.startTime,
                     endTime: timeRange.endTime
                 )
+                
+                // Also set specificTimes for recurring tasks that need specific times
+                // This is crucial for calculateNextSpecificDaysOccurrence to work properly
+                config.specificTimes = [timeRange.startTime]
             }
             
             todo.recurrenceConfig = config
@@ -296,6 +313,39 @@ class TaskScheduler: ObservableObject {
     /// Check and handle permission status
     func checkPermissionStatus() -> NotificationPermissionStatus {
         return notificationService.permissionStatus
+    }
+    
+    /// Debug method to check all scheduled notifications
+    func debugScheduledNotifications() async {
+        print("🔔 debugScheduledNotifications() called")
+        
+        // Check permissions first
+        let permissionStatus = notificationService.permissionStatus
+        print("🔔 Notification permission status: \(permissionStatus)")
+        
+        let notifications = await notificationService.getAllPendingNotifications()
+        
+        print("=== SCHEDULED NOTIFICATIONS DEBUG ===")
+        print("Total scheduled notifications: \(notifications.count)")
+        print("Permission status: \(permissionStatus)")
+        
+        logger.info("=== SCHEDULED NOTIFICATIONS DEBUG ===")
+        logger.info("Total scheduled notifications: \(notifications.count)")
+        logger.info("Permission status: \(permissionStatus)")
+        
+        for (index, notification) in notifications.enumerated() {
+            let triggerDateString = notification.triggerDate?.formatted(date: .abbreviated, time: .shortened) ?? "No trigger date"
+            print("[\(index + 1)] '\(notification.title)' - ID: \(notification.identifier) - Trigger: \(triggerDateString)")
+            logger.info("[\(index + 1)] '\(notification.title)' - ID: \(notification.identifier) - Trigger: \(triggerDateString)")
+        }
+        
+        if notifications.isEmpty {
+            print("⚠️ No notifications are scheduled!")
+            logger.warning("⚠️ No notifications are scheduled!")
+        }
+        
+        print("=== END DEBUG ===")
+        logger.info("=== END DEBUG ===")
     }
 }
 

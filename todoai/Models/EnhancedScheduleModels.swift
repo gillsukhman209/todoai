@@ -187,11 +187,14 @@ final class EnhancedSchedule {
     
     // MARK: - Occurrence Calculation
     func calculateNextOccurrence(after date: Date = Date()) -> Date? {
+        print("🔔 calculateNextOccurrence called: type=\(type), after=\(date.formatted(date: .abbreviated, time: .shortened))")
+        
         // Check cache first
         if let cached = nextOccurrenceCache,
            let expires = cacheExpiresAt,
            Date() < expires,
            cached > date {
+            print("🔔 Using cached result: \(cached.formatted(date: .abbreviated, time: .shortened))")
             return cached
         }
         
@@ -215,6 +218,7 @@ final class EnhancedSchedule {
             nextDate = calculateYearlyOccurrence(after: date, calendar: calendar)
             
         case .weekdays:
+            print("🔔 Calculating weekdays occurrence with weekdays: \(weekdays?.map { $0.rawValue } ?? [])")
             nextDate = calculateWeekdaysOccurrence(after: date, calendar: calendar)
             
         case .weekends:
@@ -235,6 +239,8 @@ final class EnhancedSchedule {
         case .custom:
             nextDate = calculateCustomOccurrence(after: date, calendar: calendar)
         }
+        
+        print("🔔 calculateNextOccurrence result: \(nextDate?.formatted(date: .abbreviated, time: .shortened) ?? "nil")")
         
         // Check against end date
         if let end = endDate, let next = nextDate, next > end {
@@ -258,10 +264,24 @@ final class EnhancedSchedule {
             nextDate = calendar.date(byAdding: .day, value: dayInterval, to: nextDate) ?? nextDate
         }
         
+        // Apply the time from timeRange if available
+        if let timeRange = timeRange {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+            if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDate) {
+                return scheduledTime
+            }
+        }
+        
         return nextDate
     }
     
     private func calculateWeeklyOccurrence(after date: Date, calendar: Calendar) -> Date? {
+        // If specific weekdays are set, use the specific weekdays logic
+        if let weekdays = weekdays, !weekdays.isEmpty {
+            return calculateSpecificWeekdaysOccurrence(after: date, calendar: calendar, weekdays: weekdays)
+        }
+        
+        // Otherwise, use the original weekly logic
         let weekInterval = interval
         var nextDate = startDate
         
@@ -269,7 +289,52 @@ final class EnhancedSchedule {
             nextDate = calendar.date(byAdding: .weekOfYear, value: weekInterval, to: nextDate) ?? nextDate
         }
         
+        // Apply the time from timeRange if available
+        if let timeRange = timeRange {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+            if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDate) {
+                return scheduledTime
+            }
+        }
+        
         return nextDate
+    }
+    
+    private func calculateSpecificWeekdaysOccurrence(after date: Date, calendar: Calendar, weekdays: [EnhancedWeekday]) -> Date? {
+        let sortedWeekdays = weekdays.sorted { $0.rawValue < $1.rawValue }
+        var nextDate = calendar.date(byAdding: .day, value: 1, to: date) ?? date
+        
+        print("🔔 calculateSpecificWeekdaysOccurrence:")
+        print("🔔   after: \(date.formatted(date: .abbreviated, time: .shortened))")
+        print("🔔   weekdays: \(sortedWeekdays.map { $0.rawValue })")
+        print("🔔   timeRange: \(timeRange?.startTime.formatted(date: .abbreviated, time: .shortened) ?? "nil")")
+        
+        // Find the next occurrence that falls on one of the specified weekdays
+        for i in 0..<14 { // Check up to 2 weeks ahead
+            let weekday = calendar.component(.weekday, from: nextDate)
+            
+            print("🔔   Day \(i + 1): \(nextDate.formatted(date: .abbreviated, time: .shortened)) is weekday \(weekday)")
+            
+            if sortedWeekdays.contains(where: { $0.rawValue == weekday }) {
+                print("🔔   Found matching weekday!")
+                
+                // Apply the time from timeRange if available
+                if let timeRange = timeRange {
+                    let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+                    if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDate) {
+                        print("🔔   Returning scheduled time: \(scheduledTime.formatted(date: .abbreviated, time: .shortened))")
+                        return scheduledTime
+                    }
+                }
+                print("🔔   Returning date without time: \(nextDate.formatted(date: .abbreviated, time: .shortened))")
+                return nextDate
+            }
+            
+            nextDate = calendar.date(byAdding: .day, value: 1, to: nextDate) ?? nextDate
+        }
+        
+        print("🔔   No matching weekday found!")
+        return nil
     }
     
     private func calculateMonthlyOccurrence(after date: Date, calendar: Calendar) -> Date? {
@@ -278,6 +343,14 @@ final class EnhancedSchedule {
         
         while nextDate <= date {
             nextDate = calendar.date(byAdding: .month, value: monthInterval, to: nextDate) ?? nextDate
+        }
+        
+        // Apply the time from timeRange if available
+        if let timeRange = timeRange {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+            if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDate) {
+                return scheduledTime
+            }
         }
         
         return nextDate
@@ -291,15 +364,42 @@ final class EnhancedSchedule {
             nextDate = calendar.date(byAdding: .year, value: yearInterval, to: nextDate) ?? nextDate
         }
         
+        // Apply the time from timeRange if available
+        if let timeRange = timeRange {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+            if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDate) {
+                return scheduledTime
+            }
+        }
+        
         return nextDate
     }
     
     private func calculateWeekdaysOccurrence(after date: Date, calendar: Calendar) -> Date? {
+        print("🔔 calculateWeekdaysOccurrence:")
+        print("🔔   weekdays: \(weekdays?.map { $0.rawValue } ?? [])")
+        print("🔔   timeRange: \(timeRange?.startTime.formatted(date: .abbreviated, time: .shortened) ?? "nil")")
+        
+        // If specific weekdays are set, use those instead of default weekdays
+        if let weekdays = weekdays, !weekdays.isEmpty {
+            print("🔔   Using specific weekdays")
+            return calculateSpecificWeekdaysOccurrence(after: date, calendar: calendar, weekdays: weekdays)
+        }
+        
+        print("🔔   Using default weekdays (Monday to Friday)")
+        // Otherwise, use the original weekdays logic (Monday to Friday)
         var nextDate = calendar.date(byAdding: .day, value: 1, to: date) ?? date
         
         while true {
             let weekday = calendar.component(.weekday, from: nextDate)
             if weekday >= 2 && weekday <= 6 { // Monday to Friday
+                // Apply the time from timeRange if available
+                if let timeRange = timeRange {
+                    let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+                    if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDate) {
+                        return scheduledTime
+                    }
+                }
                 return nextDate
             }
             nextDate = calendar.date(byAdding: .day, value: 1, to: nextDate) ?? nextDate
@@ -312,6 +412,13 @@ final class EnhancedSchedule {
         while true {
             let weekday = calendar.component(.weekday, from: nextDate)
             if weekday == 1 || weekday == 7 { // Sunday or Saturday
+                // Apply the time from timeRange if available
+                if let timeRange = timeRange {
+                    let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+                    if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDate) {
+                        return scheduledTime
+                    }
+                }
                 return nextDate
             }
             nextDate = calendar.date(byAdding: .day, value: 1, to: nextDate) ?? nextDate
@@ -330,6 +437,14 @@ final class EnhancedSchedule {
             nextDate = calendar.date(byAdding: .month, value: monthInterval, to: nextDate) ?? nextDate
         }
         
+        // Apply the time from timeRange if available
+        if let timeRange = timeRange {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+            if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDate) {
+                return scheduledTime
+            }
+        }
+        
         return nextDate
     }
     
@@ -341,6 +456,14 @@ final class EnhancedSchedule {
             nextDate = calendar.date(byAdding: .month, value: monthInterval, to: nextDate) ?? nextDate
         }
         
+        // Apply the time from timeRange if available
+        if let timeRange = timeRange {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+            if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDate) {
+                return scheduledTime
+            }
+        }
+        
         return nextDate
     }
     
@@ -350,6 +473,14 @@ final class EnhancedSchedule {
         
         while nextDate <= date {
             nextDate = calendar.date(byAdding: .month, value: monthInterval, to: nextDate) ?? nextDate
+        }
+        
+        // Apply the time from timeRange if available
+        if let timeRange = timeRange {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: timeRange.startTime)
+            if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDate) {
+                return scheduledTime
+            }
         }
         
         return nextDate
@@ -368,6 +499,48 @@ final class EnhancedSchedule {
     
     func nextOccurrence(after date: Date) -> Date? {
         return calculateNextOccurrence(after: date)
+    }
+    
+    /// Get the next N occurrences starting from the given date
+    func getNextOccurrences(count: Int, after date: Date = Date()) -> [Date] {
+        var occurrences: [Date] = []
+        var currentDate = date
+        
+        for _ in 0..<count {
+            if let nextOccurrence = calculateNextOccurrence(after: currentDate) {
+                occurrences.append(nextOccurrence)
+                currentDate = nextOccurrence
+            } else {
+                break
+            }
+        }
+        
+        return occurrences
+    }
+    
+    /// Get the next N occurrences formatted as display strings
+    func getNextOccurrencesFormatted(count: Int, after date: Date = Date()) -> [String] {
+        let occurrences = getNextOccurrences(count: count, after: date)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMM d 'at' h:mm a"
+        formatter.timeZone = TimeZone.current
+        
+        return occurrences.map { occurrence in
+            let dayFormatter = DateFormatter()
+            dayFormatter.dateFormat = "EEEE, MMM d"
+            dayFormatter.timeZone = TimeZone.current
+            let dayString = dayFormatter.string(from: occurrence)
+            
+            if let timeRange = timeRange {
+                let timeFormatter = DateFormatter()
+                timeFormatter.dateFormat = "h:mm a"
+                timeFormatter.timeZone = TimeZone.current
+                let timeString = timeFormatter.string(from: timeRange.startTime)
+                return "\(dayString) at \(timeString)"
+            } else {
+                return dayString
+            }
+        }
     }
     
     // MARK: - Helper Methods
@@ -416,3 +589,4 @@ final class EnhancedSchedule {
         cacheExpiresAt = nil
     }
 } 
+ 

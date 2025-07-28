@@ -50,6 +50,7 @@ struct ContentView: View {
                 onDeleteTodo: deleteTodo,
                 onToggleComplete: toggleTodoComplete,
                 onScheduleTodo: showSchedulingView,
+                onCompleteCleanup: completeCleanup,
                 showSidebar: $showSidebar,
                 showingNaturalLanguageInput: $showingNaturalLanguageInput
             )
@@ -188,6 +189,34 @@ struct ContentView: View {
         withAnimation(.easeInOut(duration: 0.3)) {
             showingSchedulingView = true
         }
+    }
+    
+    private func completeCleanup() async {
+        print("🧹 Starting complete cleanup...")
+        
+        // Step 1: Delete all todos from the database
+        print("🗑️ Deleting all todos...")
+        withAnimation(.easeInOut(duration: 0.25)) {
+            for todo in todos {
+                modelContext.delete(todo)
+            }
+        }
+        
+        // Step 2: Cancel all pending notifications
+        print("🔔 Cancelling all notifications...")
+        NotificationService.shared.cancelAllNotifications()
+        
+        // Step 3: Save the model context to commit deletions
+        try? modelContext.save()
+        
+        // Step 4: Wait a moment for cleanup to complete
+        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        
+        // Step 5: Show debug info
+        print("🔍 Showing debug info after cleanup...")
+        await TaskScheduler.shared.debugScheduledNotifications()
+        
+        print("✅ Complete cleanup finished!")
     }
 }
 
@@ -390,6 +419,7 @@ struct TodoListView: View {
     let onDeleteTodo: (Todo) -> Void
     let onToggleComplete: (Todo) -> Void
     let onScheduleTodo: (Todo) -> Void
+    let onCompleteCleanup: () async -> Void
     @Binding var showSidebar: Bool
     @Binding var showingNaturalLanguageInput: Bool
     @FocusState private var isMainViewFocused: Bool
@@ -443,6 +473,40 @@ struct TodoListView: View {
                     }
                     
                     Spacer()
+                    
+                    // Debug button for notifications
+                    Button(action: {
+                        print("🔔 Debug button clicked!")
+                        Task {
+                            await TaskScheduler.shared.debugScheduledNotifications()
+                        }
+                    }) {
+                        Image(systemName: "bell.badge")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Color.secondaryText)
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Debug scheduled notifications")
+                    
+                    // Cleanup button for notifications
+                    Button(action: {
+                        print("🧹 Complete cleanup button clicked!")
+                        Task {
+                            await onCompleteCleanup()
+                        }
+                    }) {
+                        Image(systemName: "trash.circle")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Color.secondaryText)
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Delete all todos and notifications")
                 }
                 .padding(.horizontal, 32)
                 .padding(.top, 32)
@@ -671,6 +735,7 @@ struct TodoRowView: View {
     @State private var isEditing = false
     @State private var editingTitle = ""
     @State private var isHovered = false
+    @State private var hasScheduledNotifications = false
     @FocusState private var isEditingFocused: Bool
     
     var body: some View {
@@ -750,6 +815,29 @@ struct TodoRowView: View {
                             .foregroundColor(Color.tertiaryText)
                     }
                     
+                    // Upcoming reminders for recurring tasks
+                    if !todo.upcomingReminders.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Next reminders:")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(Color.accentSecondary)
+                            
+                            ForEach(Array(todo.upcomingReminders.prefix(4).enumerated()), id: \.offset) { index, reminder in
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(Color.accentSecondary.opacity(0.6))
+                                        .frame(width: 3, height: 3)
+                                    
+                                    Text(reminder)
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(Color.tertiaryText)
+                                }
+                                .padding(.leading, 2)
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
+                    
                     // Original AI input (if available)
                     if let originalInput = todo.originalInput, !originalInput.isEmpty, originalInput != todo.title {
                         Text("From: \"\(originalInput)\"")
@@ -769,11 +857,11 @@ struct TodoRowView: View {
                     Button(action: {
                         onSchedule()
                     }) {
-                        Image(systemName: "bell")
+                        Image(systemName: hasScheduledNotifications ? "bell.badge.fill" : "bell")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Color.accentSecondary)
+                            .foregroundColor(hasScheduledNotifications ? Color.accent : Color.accentSecondary)
                             .frame(width: 24, height: 24)
-                            .background(Color.accentSecondary.opacity(0.1))
+                            .background((hasScheduledNotifications ? Color.accent : Color.accentSecondary).opacity(0.1))
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -848,6 +936,16 @@ struct TodoRowView: View {
                 startEditing()
             }
         }
+        .task {
+            // Check if task has scheduled notifications
+            await refreshNotificationStatus()
+        }
+        .onChange(of: todo.id) { oldValue, newValue in
+            // Refresh notification status when todo changes
+            Task {
+                await refreshNotificationStatus()
+            }
+        }
         .onChange(of: isEditing) { oldValue, newValue in
             onEditingChange(newValue)
         }
@@ -861,6 +959,10 @@ struct TodoRowView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             isEditingFocused = true
         }
+    }
+    
+    private func refreshNotificationStatus() async {
+        hasScheduledNotifications = await NotificationService.shared.hasScheduledNotifications(for: todo.id)
     }
     
     private func saveEdit() {
