@@ -182,6 +182,228 @@ final class RecurrenceConfig {
     var hasMultipleTimes: Bool {
         return !specificTimes.isEmpty
     }
+    
+    /// Calculate the next occurrence after the given date
+    func calculateNextOccurrence(after date: Date = Date()) -> Date? {
+        let calendar = Calendar.current
+        
+        switch type {
+        case .none:
+            return nil
+            
+        case .daily:
+            if !specificTimes.isEmpty {
+                return calculateNextDailyTimeOccurrence(after: date, calendar: calendar)
+            } else {
+                return calendar.date(byAdding: .day, value: interval, to: date)
+            }
+            
+        case .weekly:
+            return calendar.date(byAdding: .weekOfYear, value: interval, to: date)
+            
+        case .monthly:
+            if let day = monthlyDay {
+                return calculateNextMonthlyDayOccurrence(after: date, calendar: calendar, day: day)
+            } else {
+                return calendar.date(byAdding: .month, value: interval, to: date)
+            }
+            
+        case .yearly:
+            return calendar.date(byAdding: .year, value: interval, to: date)
+            
+        case .hourly:
+            if let timeRange = timeRange {
+                return calculateNextHourlyInRangeOccurrence(after: date, calendar: calendar)
+            } else {
+                return calendar.date(byAdding: .hour, value: interval, to: date)
+            }
+            
+        case .customInterval:
+            return calendar.date(byAdding: .hour, value: interval, to: date)
+            
+        case .specificDays:
+            return calculateNextSpecificDaysOccurrence(after: date, calendar: calendar)
+            
+        case .multipleDailyTimes:
+            return calculateNextMultipleDailyTimesOccurrence(after: date, calendar: calendar)
+        }
+    }
+    
+    /// Get the next N occurrences starting from the given date
+    func getNextOccurrences(count: Int, after date: Date = Date()) -> [Date] {
+        var occurrences: [Date] = []
+        var currentDate = date
+        
+        for _ in 0..<count {
+            if let nextOccurrence = calculateNextOccurrence(after: currentDate) {
+                occurrences.append(nextOccurrence)
+                currentDate = nextOccurrence
+            } else {
+                break
+            }
+        }
+        
+        return occurrences
+    }
+    
+    /// Get the next N occurrences formatted as display strings
+    func getNextOccurrencesFormatted(count: Int, after date: Date = Date()) -> [String] {
+        let occurrences = getNextOccurrences(count: count, after: date)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMM d 'at' h:mm a"
+        formatter.timeZone = TimeZone.current
+        
+        return occurrences.map { occurrence in
+            let dayFormatter = DateFormatter()
+            dayFormatter.dateFormat = "EEEE, MMM d"
+            dayFormatter.timeZone = TimeZone.current
+            let dayString = dayFormatter.string(from: occurrence)
+            
+            // Get the time component
+            let timeFormatter = DateFormatter()
+            timeFormatter.dateFormat = "h:mm a"
+            timeFormatter.timeZone = TimeZone.current
+            let timeString = timeFormatter.string(from: occurrence)
+            
+            return "\(dayString) at \(timeString)"
+        }
+    }
+    
+    // MARK: - Private Helper Methods
+    
+    private func calculateNextDailyTimeOccurrence(after date: Date, calendar: Calendar) -> Date? {
+        let today = calendar.startOfDay(for: date)
+        
+        // Check if any of today's times are still in the future
+        for time in specificTimes {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
+            if let todayTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: today) {
+                if todayTime > date {
+                    return todayTime
+                }
+            }
+        }
+        
+        // If no time today is in the future, get the first time tomorrow
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
+           let firstTime = specificTimes.first {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: firstTime)
+            let tomorrowStart = calendar.startOfDay(for: tomorrow)
+            return calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: tomorrowStart)
+        }
+        
+        return nil
+    }
+    
+    private func calculateNextMonthlyDayOccurrence(after date: Date, calendar: Calendar, day: Int) -> Date? {
+        let currentMonth = calendar.component(.month, from: date)
+        let currentYear = calendar.component(.year, from: date)
+        
+        // Try this month first
+        if let thisMonthDate = calendar.date(from: DateComponents(year: currentYear, month: currentMonth, day: day)),
+           thisMonthDate > date {
+            return thisMonthDate
+        }
+        
+        // Try next month
+        if let nextMonth = calendar.date(byAdding: .month, value: 1, to: date) {
+            let nextMonthComponents = calendar.dateComponents([.year, .month], from: nextMonth)
+            return calendar.date(from: DateComponents(year: nextMonthComponents.year, month: nextMonthComponents.month, day: day))
+        }
+        
+        return nil
+    }
+    
+    private func calculateNextHourlyInRangeOccurrence(after date: Date, calendar: Calendar) -> Date? {
+        guard let timeRange = timeRange else { return nil }
+        
+        let startHour = calendar.component(.hour, from: timeRange.startTime)
+        let endHour = calendar.component(.hour, from: timeRange.endTime)
+        let currentHour = calendar.component(.hour, from: date)
+        
+        // Find next hour within range
+        for hour in stride(from: currentHour + 1, through: endHour, by: interval) {
+            if let nextTime = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: date) {
+                return nextTime
+            }
+        }
+        
+        // If no more hours today, start from beginning of range tomorrow
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: date) {
+            return calendar.date(bySettingHour: startHour, minute: 0, second: 0, of: tomorrow)
+        }
+        
+        return nil
+    }
+    
+    private func calculateNextSpecificDaysOccurrence(after date: Date, calendar: Calendar) -> Date? {
+        guard !specificWeekdays.isEmpty else { return nil }
+        
+        let sortedWeekdays = specificWeekdays.sorted()
+        
+        // First, check if today is one of the target weekdays
+        let todayWeekday = calendar.component(.weekday, from: date)
+        if sortedWeekdays.contains(todayWeekday) {
+            // Check if today's scheduled time is still in the future
+            if let firstTime = specificTimes.first {
+                let timeComponents = calendar.dateComponents([.hour, .minute], from: firstTime)
+                let today = calendar.startOfDay(for: date)
+                if let todayScheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: today) {
+                    if todayScheduledTime > date {
+                        return todayScheduledTime
+                    }
+                }
+            }
+        }
+        
+        // If today doesn't work, look for the next occurrence
+        var nextDate = calendar.date(byAdding: .day, value: 1, to: date) ?? date
+        
+        // Find the next occurrence that falls on one of the specified weekdays
+        for _ in 0..<14 { // Check up to 2 weeks ahead
+            let weekday = calendar.component(.weekday, from: nextDate)
+            
+            if sortedWeekdays.contains(weekday) {
+                // Apply the time if specified
+                if let firstTime = specificTimes.first {
+                    let timeComponents = calendar.dateComponents([.hour, .minute], from: firstTime)
+                    let nextDayStart = calendar.startOfDay(for: nextDate)
+                    if let scheduledTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: nextDayStart) {
+                        return scheduledTime
+                    }
+                }
+                return nextDate
+            }
+            
+            nextDate = calendar.date(byAdding: .day, value: 1, to: nextDate) ?? nextDate
+        }
+        
+        return nil
+    }
+    
+    private func calculateNextMultipleDailyTimesOccurrence(after date: Date, calendar: Calendar) -> Date? {
+        let today = calendar.startOfDay(for: date)
+        
+        // Check if any of today's times are still in the future
+        for time in specificTimes.sorted(by: { $0 < $1 }) {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
+            if let todayTime = calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: today) {
+                if todayTime > date {
+                    return todayTime
+                }
+            }
+        }
+        
+        // If no time today is in the future, get the first time tomorrow
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
+           let firstTime = specificTimes.sorted(by: { $0 < $1 }).first {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: firstTime)
+            let tomorrowStart = calendar.startOfDay(for: tomorrow)
+            return calendar.date(bySettingHour: timeComponents.hour ?? 0, minute: timeComponents.minute ?? 0, second: 0, of: tomorrowStart)
+        }
+        
+        return nil
+    }
 }
 
 // MARK: - Natural Language Parse Result

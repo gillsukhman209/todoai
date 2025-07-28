@@ -134,6 +134,7 @@ final class TaskCreationViewModel: ObservableObject {
         }
         
         logger.info("Auto-scheduling notification for: '\(todo.title)'")
+        logger.info("Parsed data: recurrenceType=\(parsedData.recurrenceType), specificTimes=\(parsedData.specificTimes ?? []), specificWeekdays=\(parsedData.specificWeekdays ?? [])")
         
         do {
             // Request notification permissions if needed
@@ -147,6 +148,7 @@ final class TaskCreationViewModel: ObservableObject {
             
             // Create enhanced schedule from parsed data
             let schedule = createEnhancedSchedule(from: parsedData)
+      
             
             // Schedule the notification
             let result = await taskScheduler.convertAndScheduleTask(todo, withSchedule: schedule)
@@ -182,7 +184,7 @@ final class TaskCreationViewModel: ObservableObject {
         case "yearly":
             scheduleType = .yearly
         case "specific_days":
-            scheduleType = .weekly  // Use weekly instead of weekdays
+            scheduleType = .weekdays  // Use weekdays for specific day scheduling
         case "custom_interval":
             scheduleType = .custom
         case "multiple_daily_times":
@@ -194,24 +196,35 @@ final class TaskCreationViewModel: ObservableObject {
         // Determine the start date
         var startDate: Date
         if scheduleType == .once {
-            // For one-time tasks, use today with the specified time
+            // For one-time tasks, use the specified date and time
+            let calendar = Calendar.current
+            
+            // Determine the target date
+            var targetDate: Date
+            if let dueDateString = parsedData.dueDate,
+               let dueDate = Date.from(dateString: dueDateString) {
+                targetDate = dueDate
+            } else {
+                targetDate = Date() // Default to today if no specific date
+            }
+            
+            // Apply the specified time if available
             if let dueTimeString = parsedData.dueTime,
                let dueTime = Date.from(timeString: dueTimeString) {
-                let calendar = Calendar.current
                 let timeComponents = calendar.dateComponents([.hour, .minute], from: dueTime)
                 startDate = calendar.date(
                     bySettingHour: timeComponents.hour ?? 0,
                     minute: timeComponents.minute ?? 0,
                     second: 0,
-                    of: Date()
-                ) ?? Date()
+                    of: targetDate
+                ) ?? targetDate
                 
-                // If the time has already passed today, schedule for tomorrow
+                // If the calculated time has already passed, schedule for the next day
                 if startDate <= Date() {
                     startDate = calendar.date(byAdding: .day, value: 1, to: startDate) ?? startDate
                 }
             } else {
-                startDate = Date()
+                startDate = targetDate
             }
         } else {
             // For recurring tasks, start from today

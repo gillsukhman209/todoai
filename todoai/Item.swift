@@ -84,6 +84,23 @@ final class Todo: Identifiable {
         }
     }
     
+    /// Get the next 4 upcoming reminders for this todo (for recurring tasks)
+    var upcomingReminders: [String] {
+        guard let config = recurrenceConfig, config.isRecurring else { return [] }
+        // Use a fixed reference point (start of today) to prevent dynamic time updates
+        let today = Calendar.current.startOfDay(for: Date())
+        return config.getNextOccurrencesFormatted(count: 4, after: today)
+    }
+    
+    /// Get a formatted string showing upcoming reminders
+    var upcomingRemindersText: String {
+        let reminders = upcomingReminders
+        guard !reminders.isEmpty else { return "" }
+        
+        let prefix = reminders.count == 1 ? "Next reminder:" : "Next reminders:"
+        return "\(prefix)\n" + reminders.prefix(4).map { "• \($0)" }.joined(separator: "\n")
+    }
+    
     init(title: String, originalInput: String? = nil) {
         self.id = UUID()
         self.title = title

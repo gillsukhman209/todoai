@@ -71,6 +71,9 @@ final class OpenAIService: ObservableObject {
         logger.info("✅ Extracted content from OpenAI response")
         logger.info("📄 Raw AI response: \(jsonString)")
         
+        // Log the original input for comparison
+        logger.info("🔍 Original input: '\(input)'")
+        
         // Strip markdown code blocks if present
         let cleanedJsonString = jsonString
             .replacingOccurrences(of: "```json\n", with: "")
@@ -92,6 +95,21 @@ final class OpenAIService: ObservableObject {
         do {
             let parsedData = try JSONDecoder().decode(ParsedTaskData.self, from: jsonData)
             logger.info("🎉 Successfully parsed task: '\(input)' -> '\(parsedData.cleanTitle)'")
+            
+            // Validate time parsing accuracy
+            if let specificTimes = parsedData.specificTimes {
+                logger.info("⏰ Parsed times: \(specificTimes)")
+                
+                // Check if parsed times seem reasonable compared to input
+                for time in specificTimes {
+                    if input.lowercased().contains(time.lowercased()) {
+                        logger.info("✅ Time parsing appears correct: \(time)")
+                    } else {
+                        logger.warning("⚠️ Time parsing might be incorrect. Input: '\(input)', Parsed: '\(time)'")
+                    }
+                }
+            }
+            
             return parsedData
         } catch {
             logger.error("❌ Failed to decode JSON: \(error.localizedDescription)")
@@ -293,10 +311,14 @@ final class OpenAIService: ObservableObject {
 
         CRITICAL: For relative time expressions, you MUST calculate the actual time/date values. DO NOT return placeholders like "[CALCULATE: ...]". Calculate the actual time based on the current date/time provided above.
 
+        IMPORTANT: When parsing specific times like "10:36 AM", you must preserve the EXACT time specified. Do not round or approximate. "10:36 AM" should remain "10:36 AM", not "10:35 AM" or any other time.
+
         Example calculations:
         - If current time is 2:30 PM and user says "in 30 minutes", return "3:00 PM"
         - If current time is 10:15 AM and user says "in 2 hours", return "12:15 PM"
         - If current time is 5:45 PM and user says "in 15 minutes", return "6:00 PM"
+        - If user says "10:36 AM", return exactly "10:36 AM"
+        - If user says "remind me at 3:47 PM", return exactly "3:47 PM"
 
         Input: "remind me in 30 minutes to take out the trash"
         Output: {"cleanTitle": "take out the trash", "dueDate": null, "dueTime": "3:00 PM", "recurrenceType": "none", "interval": null, "specificWeekdays": null, "specificTimes": null, "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "One-time reminder to take out the trash in 30 minutes"}
@@ -340,6 +362,9 @@ final class OpenAIService: ObservableObject {
         Input: "pay PGE every Friday at 10am"
         Output: {"cleanTitle": "pay PGE", "dueDate": null, "dueTime": null, "recurrenceType": "specific_days", "interval": null, "specificWeekdays": ["friday"], "specificTimes": ["10:00 AM"], "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "Weekly task to pay PGE every Friday at 10 AM"}
 
+        Input: "remind me every tuesday at 10:46 am to call zony"
+        Output: {"cleanTitle": "call zony", "dueDate": null, "dueTime": null, "recurrenceType": "specific_days", "interval": null, "specificWeekdays": ["tuesday"], "specificTimes": ["10:46 AM"], "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": null, "description": "Weekly task to call zony every Tuesday at 10:46 AM"}
+
         Input: "submit the report monthly on the 1st at 9am"
         Output: {"cleanTitle": "submit the report", "dueDate": null, "dueTime": null, "recurrenceType": "monthly", "interval": null, "specificWeekdays": null, "specificTimes": ["9:00 AM"], "timeRangeStart": null, "timeRangeEnd": null, "monthlyDay": 1, "description": "Monthly task to submit report on the 1st at 9 AM"}
 
@@ -375,6 +400,7 @@ final class OpenAIService: ObservableObject {
         - NEVER return placeholder text like "[CALCULATE: ...]" - always return actual calculated values
         - For dates, use YYYY-MM-DD format (e.g., "2025-07-16")
         - For times, use 12-hour format with AM/PM (e.g., "3:30 PM")
+        - PRESERVE EXACT TIMES: If user says "10:36 AM", return exactly "10:36 AM" - do not round or approximate
 
         Return ONLY the JSON object, no other text.
         """

@@ -191,6 +191,9 @@ class NotificationService: ObservableObject {
             throw NotificationError.permissionDenied
         }
         
+        // Clean up old notifications before scheduling new ones
+        await cleanupOldNotifications()
+        
         guard let nextOccurrence = task.schedule?.nextOccurrence() else {
             throw NotificationError.invalidDate
         }
@@ -236,14 +239,31 @@ class NotificationService: ObservableObject {
             throw NotificationError.invalidDate
         }
         
+        // Clean up old notifications before scheduling new ones
+        await cleanupOldNotifications()
+        
+        logger.info("Scheduling recurring notifications for task: '\(task.title)'")
+        logger.info("Schedule type: \(schedule.type), weekdays: \(schedule.weekdays?.map { $0.rawValue } ?? [])")
+        logger.info("Schedule timeRange: \(schedule.timeRange?.startTime.formatted(date: .abbreviated, time: .shortened) ?? "nil")")
+        
+        print("🔔 Scheduling recurring notifications for: '\(task.title)'")
+        print("🔔 Schedule type: \(schedule.type)")
+        print("🔔 Schedule weekdays: \(schedule.weekdays?.map { $0.rawValue } ?? [])")
+        print("🔔 Schedule timeRange: \(schedule.timeRange?.startTime.formatted(date: .abbreviated, time: .shortened) ?? "nil")")
+        
         // Schedule up to 64 notifications (iOS limit)
         let maxNotifications = 64
         var currentDate = Date()
         
         for i in 0..<maxNotifications {
             guard let nextOccurrence = schedule.calculateNextOccurrence(after: currentDate) else {
+                print("🔔 No more occurrences found after \(currentDate.formatted(date: .abbreviated, time: .shortened))")
+                logger.info("No more occurrences found after \(currentDate.formatted(date: .abbreviated, time: .shortened))")
                 break
             }
+            
+            print("🔔 Scheduling notification \(i + 1): \(nextOccurrence.formatted(date: .abbreviated, time: .shortened))")
+            logger.info("Scheduling notification \(i + 1): \(nextOccurrence.formatted(date: .abbreviated, time: .shortened))")
             
             let content = UNMutableNotificationContent()
             content.title = task.title
@@ -303,10 +323,87 @@ class NotificationService: ObservableObject {
         logger.info("Cancelled all pending notifications")
     }
     
+    /// Clean up old and expired notifications to stay under iOS 64 notification limit
+    func cleanupOldNotifications() async {
+        let requests = await notificationCenter.pendingNotificationRequests()
+        print("🧹 Found \(requests.count) pending notifications before cleanup")
+        
+        guard requests.count > 50 else { // Start cleanup when we have more than 50
+            print("🧹 Notification count (\(requests.count)) is acceptable, no cleanup needed")
+            return
+        }
+        
+        let now = Date()
+        var toRemove: [String] = []
+        
+        // Remove expired notifications first
+        for request in requests {
+            if let trigger = request.trigger as? UNCalendarNotificationTrigger,
+               let nextTriggerDate = trigger.nextTriggerDate(),
+               nextTriggerDate < now {
+                toRemove.append(request.identifier)
+            }
+        }
+        
+        // If we still have too many, remove the oldest ones
+        if requests.count - toRemove.count > 50 {
+            let sortedRequests = requests.compactMap { request -> (request: UNNotificationRequest, date: Date)? in
+                guard let trigger = request.trigger as? UNCalendarNotificationTrigger,
+                      let triggerDate = trigger.nextTriggerDate() else { return nil }
+                return (request, triggerDate)
+            }.sorted { $0.date < $1.date }
+            
+            let targetCount = 45 // Keep 45 notifications, remove the rest
+            if sortedRequests.count > targetCount {
+                let oldestToRemove = sortedRequests.prefix(sortedRequests.count - targetCount)
+                toRemove.append(contentsOf: oldestToRemove.map { $0.request.identifier })
+            }
+        }
+        
+        if !toRemove.isEmpty {
+            notificationCenter.removePendingNotificationRequests(withIdentifiers: toRemove)
+            print("🧹 Removed \(toRemove.count) old notifications")
+            logger.info("Cleaned up \(toRemove.count) old notifications")
+        }
+        
+        let remainingCount = requests.count - toRemove.count
+        print("🧹 Cleanup complete. Remaining notifications: \(remainingCount)")
+    }
+    
     /// Get pending notifications count
     func getPendingNotificationsCount() async -> Int {
         let requests = await notificationCenter.pendingNotificationRequests()
         return requests.count
+    }
+    
+    /// Get all pending notifications with details (for debugging)
+    func getAllPendingNotifications() async -> [(identifier: String, title: String, triggerDate: Date?)] {
+        print("🔔 getAllPendingNotifications() called")
+        let requests = await notificationCenter.pendingNotificationRequests()
+        print("🔔 Found \(requests.count) pending notification requests")
+        
+        return requests.map { request in
+            let triggerDate: Date?
+            if let calendarTrigger = request.trigger as? UNCalendarNotificationTrigger {
+                triggerDate = calendarTrigger.nextTriggerDate()
+            } else {
+                triggerDate = nil
+            }
+            
+            return (
+                identifier: request.identifier,
+                title: request.content.title,
+                triggerDate: triggerDate
+            )
+        }
+    }
+    
+    /// Check if a task has scheduled notifications
+    func hasScheduledNotifications(for taskId: UUID) async -> Bool {
+        let requests = await notificationCenter.pendingNotificationRequests()
+        return requests.contains { request in
+            request.identifier.starts(with: taskId.uuidString)
+        }
     }
     
     /// Snooze a notification by specified minutes
